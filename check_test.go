@@ -64,7 +64,7 @@ func TestCheck(t *testing.T) {
 		},
 
 		{
-			description: "check returns the previous version when its still latest",
+			description: "check returns all open PRs if there is a previous",
 			source: resource.Source{
 				Repository:  "itsdalmo/test-repository",
 				AccessToken: "oauthtoken",
@@ -73,7 +73,15 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[8], testPullRequests[8].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[7], testPullRequests[7].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[5], testPullRequests[5].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[4], testPullRequests[4].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
+				
 			},
 		},
 
@@ -107,6 +115,7 @@ func TestCheck(t *testing.T) {
 				{"terraform/modules/variables.tf", "travis.yml"},
 			},
 			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
 			},
 		},
@@ -126,6 +135,7 @@ func TestCheck(t *testing.T) {
 				{"terraform/modules/variables.tf", "travis.yml"},
 			},
 			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
 			},
 		},
@@ -140,6 +150,14 @@ func TestCheck(t *testing.T) {
 			version:      resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[8], testPullRequests[8].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[7], testPullRequests[7].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[5], testPullRequests[5].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[4], testPullRequests[4].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[0], testPullRequests[0].Tip.CommittedDate.Time),
 			},
 		},
@@ -183,6 +201,10 @@ func TestCheck(t *testing.T) {
 			version:      resource.NewVersion(testPullRequests[5], testPullRequests[5].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[8], testPullRequests[8].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[7], testPullRequests[7].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[5], testPullRequests[5].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
 				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
