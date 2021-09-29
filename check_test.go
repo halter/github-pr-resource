@@ -11,18 +11,27 @@ import (
 
 var (
 	testPullRequests = []*resource.PullRequest{
-		createTestPR(1, "master", true, false, 0, nil, false, githubv4.PullRequestStateOpen),
-		createTestPR(2, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen),
-		createTestPR(3, "master", false, false, 0, nil, true, githubv4.PullRequestStateOpen),
-		createTestPR(4, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen),
-		createTestPR(5, "master", false, true, 0, nil, false, githubv4.PullRequestStateOpen),
-		createTestPR(6, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen),
-		createTestPR(7, "develop", false, false, 0, []string{"enhancement"}, false, githubv4.PullRequestStateOpen),
-		createTestPR(8, "master", false, false, 1, []string{"wontfix"}, false, githubv4.PullRequestStateOpen),
-		createTestPR(9, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen),
-		createTestPR(10, "master", false, false, 0, nil, false, githubv4.PullRequestStateClosed),
-		createTestPR(11, "master", false, false, 0, nil, false, githubv4.PullRequestStateMerged),
-		createTestPR(12, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen),
+		createTestPR(1, "master", true, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(2, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(3, "master", false, false, 0, nil, true, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(4, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(5, "master", false, true, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(6, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(7, "develop", false, false, 0, []string{"enhancement"}, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(8, "master", false, false, 1, []string{"wontfix"}, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(9, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+		createTestPR(10, "master", false, false, 0, nil, false, githubv4.PullRequestStateClosed, []resource.StatusContext{}),
+		createTestPR(11, "master", false, false, 0, nil, false, githubv4.PullRequestStateMerged, []resource.StatusContext{}),
+		createTestPR(12, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
+
+		createTestPR(13, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{
+			{Context: "my-status-check", State: "SUCCESS"},
+		}),
+		// multiple status check
+		createTestPR(14, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{
+			{Context: "my-status-check", State: "SUCCESS"},
+			{Context: "my-failed-status-check", State: "FAILURE"},
+		}),
 	}
 )
 
@@ -38,8 +47,9 @@ func TestCheck(t *testing.T) {
 		{
 			description: "check returns the latest version if there is no previous",
 			source: resource.Source{
-				Repository:  "itsdalmo/test-repository",
-				AccessToken: "oauthtoken",
+				Repository:    "itsdalmo/test-repository",
+				AccessToken:   "oauthtoken",
+				StatusFilters: []resource.StatusFilter{},
 			},
 			version:      resource.Version{},
 			pullRequests: testPullRequests,
@@ -260,6 +270,40 @@ func TestCheck(t *testing.T) {
 			expected: resource.CheckResponse{
 				resource.NewVersion(testPullRequests[9]),
 				resource.NewVersion(testPullRequests[10]),
+			},
+		},
+
+		{
+			description: "check returns a PR that has a complete status for a status check",
+			source: resource.Source{
+				Repository:  "itsdalmo/test-repository",
+				AccessToken: "oauthtoken",
+				StatusFilters: []resource.StatusFilter{
+					{Context: "my-status-check", State: "success"},
+				},
+			},
+			version:      resource.Version{},
+			pullRequests: testPullRequests,
+			files:        [][]string{},
+			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[12]),
+			},
+		},
+		{
+			description: "check returns a PR that has multiple required status checks",
+			source: resource.Source{
+				Repository:  "itsdalmo/test-repository",
+				AccessToken: "oauthtoken",
+				StatusFilters: []resource.StatusFilter{
+					{Context: "my-status-check", State: "success"},
+					{Context: "my-failed-status-check", State: "failure"},
+				},
+			},
+			version:      resource.Version{},
+			pullRequests: testPullRequests,
+			files:        [][]string{},
+			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[13]),
 			},
 		},
 	}

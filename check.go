@@ -68,6 +68,22 @@ Loop:
 			}
 		}
 
+		if len(request.Source.StatusFilters) > 0 {
+			for _, statusFilter := range request.Source.StatusFilters {
+				isValid := false
+				for _, prStatus := range p.Tip.Status.Contexts {
+					if prStatus.Context == statusFilter.Context && strings.EqualFold(prStatus.State, statusFilter.State) {
+						// requires the given status exists and that it matches the desired state
+						isValid = true
+						break
+					}
+				}
+				if !isValid {
+					continue Loop
+				}
+			}
+		}
+
 		// Filter out forks.
 		if request.Source.DisableForks && p.IsCrossRepository {
 			continue

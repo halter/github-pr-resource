@@ -9,6 +9,11 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
+type StatusFilter struct {
+	Context string
+	State   string
+}
+
 // Source represents the configuration for the resource.
 type Source struct {
 	Repository              string                      `json:"repository"`
@@ -27,6 +32,7 @@ type Source struct {
 	RequiredReviewApprovals int                         `json:"required_review_approvals"`
 	Labels                  []string                    `json:"labels"`
 	States                  []githubv4.PullRequestState `json:"states"`
+	StatusFilters           []StatusFilter              `json:"status_filters"`
 }
 
 // Validate the source configuration.
@@ -142,6 +148,14 @@ type CommitObject struct {
 		}
 		Email string
 	}
+	Status struct {
+		Contexts []StatusContext
+	}
+}
+
+type StatusContext struct {
+	Context string
+	State   string
 }
 
 // ChangedFileObject represents the GraphQL FilesChanged node.

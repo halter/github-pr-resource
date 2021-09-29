@@ -1,5 +1,7 @@
 module github.com/telia-oss/github-pr-resource
 
+go 1.16
+
 require (
 	github.com/golang/protobuf v1.4.0 // indirect
 	github.com/google/btree v1.0.0 // indirect
@@ -18,5 +20,3 @@ require (
 	golang.org/x/tools v0.0.0-20200423205358-59e73619c742 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
 )
-
-go 1.14
