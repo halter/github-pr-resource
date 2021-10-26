@@ -85,13 +85,13 @@ type Version struct {
 }
 
 // NewVersion constructs a new Version.
-func NewVersion(p *PullRequest) Version {
+func NewVersion(p *PullRequest, committedDate time.Time) Version {
 	return Version{
 		PR:                  strconv.Itoa(p.Number),
 		Commit:              p.Tip.OID,
-		CommittedDate:       p.UpdatedDate().Time,
 		ApprovedReviewCount: strconv.Itoa(p.ApprovedReviewCount),
 		State:               p.State,
+		CommittedDate:       committedDate,
 	}
 }
 
@@ -154,8 +154,9 @@ type CommitObject struct {
 }
 
 type StatusContext struct {
-	Context string
-	State   string
+	Context   string
+	State     string
+	CreatedAt githubv4.DateTime
 }
 
 // ChangedFileObject represents the GraphQL FilesChanged node.

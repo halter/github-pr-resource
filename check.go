@@ -2,12 +2,12 @@ package resource
 
 import (
 	"fmt"
+	"github.com/shurcooL/githubv4"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-
-	"github.com/shurcooL/githubv4"
+	"time"
 )
 
 // Check (business logic)
@@ -44,8 +44,33 @@ Loop:
 			continue
 		}
 
+		versionTime := p.Tip.CommittedDate.Time
+		if len(request.Source.StatusFilters) > 0 {
+			for _, statusFilter := range request.Source.StatusFilters {
+				// "zero time - epoch = 0"
+				versionTime = time.Time{}
+				isValid := false
+				for _, prStatus := range p.Tip.Status.Contexts {
+					if prStatus.Context == statusFilter.Context && strings.EqualFold(prStatus.State, statusFilter.State) {
+						// requires the given status exists and that it matches the desired state
+						isValid = true
+						// set the versionTime to the latest time of all
+						// the status checks
+
+						if prStatus.CreatedAt.Time.After(versionTime) {
+							versionTime = prStatus.CreatedAt.Time
+						}
+						break
+					}
+				}
+				if !isValid {
+					continue Loop
+				}
+			}
+		}
+
 		// Filter out commits that are too old.
-		if !p.UpdatedDate().Time.After(request.Version.CommittedDate) {
+		if !versionTime.After(request.Version.CommittedDate) {
 			continue
 		}
 
@@ -65,22 +90,6 @@ Loop:
 
 			if !labelFound {
 				continue Loop
-			}
-		}
-
-		if len(request.Source.StatusFilters) > 0 {
-			for _, statusFilter := range request.Source.StatusFilters {
-				isValid := false
-				for _, prStatus := range p.Tip.Status.Contexts {
-					if prStatus.Context == statusFilter.Context && strings.EqualFold(prStatus.State, statusFilter.State) {
-						// requires the given status exists and that it matches the desired state
-						isValid = true
-						break
-					}
-				}
-				if !isValid {
-					continue Loop
-				}
 			}
 		}
 
@@ -137,7 +146,7 @@ Loop:
 				continue Loop
 			}
 		}
-		response = append(response, NewVersion(p))
+		response = append(response, NewVersion(p, versionTime))
 	}
 
 	// Sort the commits by date

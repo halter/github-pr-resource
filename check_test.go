@@ -2,6 +2,7 @@ package resource_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/shurcooL/githubv4"
 	"github.com/stretchr/testify/assert"
@@ -32,6 +33,9 @@ var (
 			{Context: "my-status-check", State: "SUCCESS"},
 			{Context: "my-failed-status-check", State: "FAILURE"},
 		}),
+		createTestPR(15, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{
+			{Context: "my-status-check-2", State: "SUCCESS", CreatedAt: githubv4.DateTime{Time: time.Now().AddDate(0, 0, 1)}},
+		}),
 	}
 )
 
@@ -55,7 +59,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[1]),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -65,11 +69,11 @@ func TestCheck(t *testing.T) {
 				Repository:  "itsdalmo/test-repository",
 				AccessToken: "oauthtoken",
 			},
-			version:      resource.NewVersion(testPullRequests[1]),
+			version:      resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[1]),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -79,12 +83,12 @@ func TestCheck(t *testing.T) {
 				Repository:  "itsdalmo/test-repository",
 				AccessToken: "oauthtoken",
 			},
-			version:      resource.NewVersion(testPullRequests[3]),
+			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2]),
-				resource.NewVersion(testPullRequests[1]),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -95,7 +99,7 @@ func TestCheck(t *testing.T) {
 				AccessToken: "oauthtoken",
 				Paths:       []string{"terraform/*/*.tf", "terraform/*/*/*.tf"},
 			},
-			version:      resource.NewVersion(testPullRequests[3]),
+			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			files: [][]string{
 				{"README.md", "travis.yml"},
@@ -103,7 +107,7 @@ func TestCheck(t *testing.T) {
 				{"terraform/modules/variables.tf", "travis.yml"},
 			},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2]),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -114,7 +118,7 @@ func TestCheck(t *testing.T) {
 				AccessToken: "oauthtoken",
 				IgnorePaths: []string{"*.md", "*.yml"},
 			},
-			version:      resource.NewVersion(testPullRequests[3]),
+			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			files: [][]string{
 				{"README.md", "travis.yml"},
@@ -122,7 +126,7 @@ func TestCheck(t *testing.T) {
 				{"terraform/modules/variables.tf", "travis.yml"},
 			},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2]),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -133,10 +137,10 @@ func TestCheck(t *testing.T) {
 				AccessToken:   "oauthtoken",
 				DisableCISkip: true,
 			},
-			version:      resource.NewVersion(testPullRequests[1]),
+			version:      resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[0]),
+				resource.NewVersion(testPullRequests[0], testPullRequests[0].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -147,10 +151,10 @@ func TestCheck(t *testing.T) {
 				AccessToken:  "oauthtoken",
 				IgnoreDrafts: true,
 			},
-			version:      resource.NewVersion(testPullRequests[3]),
+			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[1]),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -161,11 +165,11 @@ func TestCheck(t *testing.T) {
 				AccessToken:  "oauthtoken",
 				IgnoreDrafts: false,
 			},
-			version:      resource.NewVersion(testPullRequests[3]),
+			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2]),
-				resource.NewVersion(testPullRequests[1]),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -176,12 +180,12 @@ func TestCheck(t *testing.T) {
 				AccessToken:  "oauthtoken",
 				DisableForks: true,
 			},
-			version:      resource.NewVersion(testPullRequests[5]),
+			version:      resource.NewVersion(testPullRequests[5], testPullRequests[5].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[3]),
-				resource.NewVersion(testPullRequests[2]),
-				resource.NewVersion(testPullRequests[1]),
+				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -196,7 +200,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[6]),
+				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -207,10 +211,10 @@ func TestCheck(t *testing.T) {
 				AccessToken:             "oauthtoken",
 				RequiredReviewApprovals: 1,
 			},
-			version:      resource.NewVersion(testPullRequests[8]),
+			version:      resource.NewVersion(testPullRequests[8], testPullRequests[8].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[7]),
+				resource.NewVersion(testPullRequests[7], testPullRequests[7].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -225,7 +229,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[6]),
+				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -240,7 +244,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[9]),
+				resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.CommittedDate.Time),
 			},
 		},
 
@@ -256,7 +260,6 @@ func TestCheck(t *testing.T) {
 			files:        [][]string{},
 			expected:     resource.CheckResponse(nil),
 		},
-
 		{
 			description: "check returns versions from a PR with multiple state filters",
 			source: resource.Source{
@@ -264,15 +267,14 @@ func TestCheck(t *testing.T) {
 				AccessToken: "oauthtoken",
 				States:      []githubv4.PullRequestState{githubv4.PullRequestStateClosed, githubv4.PullRequestStateMerged},
 			},
-			version:      resource.NewVersion(testPullRequests[11]),
+			version:      resource.NewVersion(testPullRequests[11], testPullRequests[11].Tip.CommittedDate.Time),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[9]),
-				resource.NewVersion(testPullRequests[10]),
+				resource.NewVersion(testPullRequests[10], testPullRequests[10].Tip.CommittedDate.Time),
+				resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.CommittedDate.Time),
 			},
 		},
-
 		{
 			description: "check returns a PR that has a complete status for a status check",
 			source: resource.Source{
@@ -286,7 +288,23 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[12]),
+				resource.NewVersion(testPullRequests[12], testPullRequests[12].Tip.CommittedDate.Time),
+			},
+		},
+		{
+			description: "check returns a PR where the check created_at is greater than the resource version",
+			source: resource.Source{
+				Repository:  "itsdalmo/test-repository",
+				AccessToken: "oauthtoken",
+				StatusFilters: []resource.StatusFilter{
+					{Context: "my-status-check-2", State: "success"},
+				},
+			},
+			version:      resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.CommittedDate.Time),
+			pullRequests: testPullRequests,
+			files:        [][]string{},
+			expected: resource.CheckResponse{
+				resource.NewVersion(testPullRequests[14], testPullRequests[14].Tip.Status.Contexts[0].CreatedAt.Time),
 			},
 		},
 		{
@@ -303,7 +321,8 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[13]),
+				// todo: pull request index
+				resource.NewVersion(testPullRequests[13], testPullRequests[13].Tip.CommittedDate.Time),
 			},
 		},
 	}

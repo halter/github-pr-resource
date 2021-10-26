@@ -346,6 +346,18 @@ func createTestPR(
 		labelObjects = append(labelObjects, lObject)
 	}
 
+	var statusContexts []resource.StatusContext
+	for _, s := range status {
+		createdAt := githubv4.DateTime{Time: d}
+		if !s.CreatedAt.IsZero() {
+			createdAt = s.CreatedAt
+		}
+		statusContexts = append(statusContexts, resource.StatusContext{
+			Context:   s.Context,
+			State:     s.State,
+			CreatedAt: createdAt,
+		})
+	}
 	return &resource.PullRequest{
 		PullRequestObject: resource.PullRequestObject{
 			ID:          fmt.Sprintf("pr%s", n),
@@ -378,7 +390,7 @@ func createTestPR(
 				Email: "user@example.com",
 			},
 			Status: struct{ Contexts []resource.StatusContext }{
-				Contexts: status,
+				Contexts: statusContexts,
 			},
 		},
 		ApprovedReviewCount: approvedCount,
