@@ -80,18 +80,20 @@ type Version struct {
 	PR                  string                    `json:"pr"`
 	Commit              string                    `json:"commit"`
 	CommittedDate       time.Time                 `json:"committed,omitempty"`
+	ChangedDate         time.Time                 `json:"changed,omitempty"`
 	ApprovedReviewCount string                    `json:"approved_review_count"`
 	State               githubv4.PullRequestState `json:"state"`
 }
 
 // NewVersion constructs a new Version.
-func NewVersion(p *PullRequest, committedDate time.Time) Version {
+func NewVersion(p *PullRequest, changedDate time.Time) Version {
 	return Version{
 		PR:                  strconv.Itoa(p.Number),
 		Commit:              p.Tip.OID,
 		ApprovedReviewCount: strconv.Itoa(p.ApprovedReviewCount),
 		State:               p.State,
-		CommittedDate:       committedDate,
+		CommittedDate:       p.Tip.CommittedDate.Time,
+		ChangedDate:         changedDate,
 	}
 }
 
@@ -101,6 +103,22 @@ type PullRequest struct {
 	Tip                 CommitObject
 	ApprovedReviewCount int
 	Labels              []LabelObject
+}
+
+// Age: returns a date of the last update to the PR.
+// If the job runs every minute, only PRs with an Age() in the last minute will run.
+func (p *PullRequest) Age() time.Time {
+	age := p.Tip.PushedDate
+	if age == nil {
+		age = &p.Tip.CommittedDate
+	}
+	// handles the case where you're creating a fresh PR:
+	// there might be a few minutes between the push date and when you open the PR,
+	// so in that case take the CreatedAt date.
+	if age.Time.Before(p.CreatedAt.Time) {
+		age = &p.CreatedAt
+	}
+	return age.Time
 }
 
 // PullRequestObject represents the GraphQL commit node.
@@ -118,6 +136,7 @@ type PullRequestObject struct {
 	IsCrossRepository bool
 	IsDraft           bool
 	State             githubv4.PullRequestState
+	CreatedAt         githubv4.DateTime
 	ClosedAt          githubv4.DateTime
 	MergedAt          githubv4.DateTime
 }
@@ -141,6 +160,7 @@ type CommitObject struct {
 	ID            string
 	OID           string
 	CommittedDate githubv4.DateTime
+	PushedDate    *githubv4.DateTime
 	Message       string
 	Author        struct {
 		User struct {
