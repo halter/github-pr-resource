@@ -10,7 +10,7 @@
 A Concourse resource for pull requests on Github. Written in Go and based on the [Github V4 (GraphQL) API][graphql-api].
 Inspired by [the original][original-resource], with some important differences:
 
-- Github V4: `check` only requires 1 API call per 100th _open_ pull request. (See [#costs](#costs) for more information).
+- Github V4: `check` only requires 1 API call per 100th *open* pull request. (See [#costs](#costs) for more information).
 - Fetch/merge: `get` will always merge a specific commit from the Pull request into the latest base.
 - Metadata: `get` and `put` provides information about which commit (SHA) was used from both the PR and base.
 - Webhooks: Does not implement any caching thanks to GraphQL, which means it works well with webhooks.
@@ -20,7 +20,7 @@ Make sure to check out [#migrating](#migrating) to learn more.
 ## Source Configuration
 
 | Parameter                   | Required | Example                          | Description                                                                                                                                                                                                                                                                                |
-| --------------------------- | -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+|-----------------------------|----------|----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `repository`                | Yes      | `itsdalmo/test-repository`       | The repository to target.                                                                                                                                                                                                                                                                  |
 | `access_token`              | Yes      |                                  | A Github Access Token with repository access (required for setting status on commits). N.B. If you want github-pr-resource to work with a private repository. Set `repo:full` permissions on the access token you create on GitHub. If it is a public repository, `repo:status` is enough. |
 | `v3_endpoint`               | No       | `https://api.github.com`         | Endpoint to use for the V3 Github API (Restful).                                                                                                                                                                                                                                           |
@@ -32,18 +32,17 @@ Make sure to check out [#migrating](#migrating) to learn more.
 | `disable_forks`             | No       | `true`                           | Disable triggering of the resource if the pull request's fork repository is different to the configured repository.                                                                                                                                                                        |
 | `ignore_drafts`             | No       | `false`                          | Disable triggering of the resource if the pull request is in Draft status.                                                                                                                                                                                                                 |
 | `required_review_approvals` | No       | `2`                              | Disable triggering of the resource if the pull request does not have at least `X` approved review(s).                                                                                                                                                                                      |
-| `git_crypt_key`             | No       | `AEdJVENSWVBUS0VZAAAAA...`       | Base64 encoded git-crypt key. Setting this will unlock / decrypt the repository with git-crypt. To get the key simply execute `git-crypt export-key -- -                                                                                                                                   | base64` in an encrypted repository. |
+| `git_crypt_key`             | No       | `AEdJVENSWVBUS0VZAAAAA...`       | Base64 encoded git-crypt key. Setting this will unlock / decrypt the repository with git-crypt. To get the key simply execute `git-crypt export-key -- - | base64` in an encrypted repository.                                                                                             |
 | `base_branch`               | No       | `master`                         | Name of a branch. The pipeline will only trigger on pull requests against the specified branch.                                                                                                                                                                                            |
 | `labels`                    | No       | `["bug", "enhancement"]`         | The labels on the PR. The pipeline will only trigger on pull requests having at least one of the specified labels.                                                                                                                                                                         |
 | `disable_git_lfs`           | No       | `true`                           | Disable Git LFS, skipping an attempt to convert pointers of files tracked into their corresponding objects when checked out into a working copy.                                                                                                                                           |
 | `states`                    | No       | `["OPEN", "MERGED"]`             | The PR states to select (`OPEN`, `MERGED` or `CLOSED`). The pipeline will only trigger on pull requests matching one of the specified states. Default is ["OPEN"].                                                                                                                         |
 
 Notes:
-
-- If `v3_endpoint` is set, `v4_endpoint` must also be set (and the other way around).
-- Look at the [Concourse Resources documentation](https://concourse-ci.org/resources.html#resource-webhook-token)
-  for webhook token configuration.
-- When using `required_review_approvals`, you may also want to enable GitHub's branch protection rules to [dismiss stale pull request approvals when new commits are pushed](https://help.github.com/en/articles/enabling-required-reviews-for-pull-requests).
+ - If `v3_endpoint` is set, `v4_endpoint` must also be set (and the other way around).
+ - Look at the [Concourse Resources documentation](https://concourse-ci.org/resources.html#resource-webhook-token)
+ for webhook token configuration.
+ - When using `required_review_approvals`, you may also want to enable GitHub's branch protection rules to [dismiss stale pull request approvals when new commits are pushed](https://help.github.com/en/articles/enabling-required-reviews-for-pull-requests).
 
 ## Behaviour
 
@@ -63,26 +62,25 @@ If several commits are pushed to a given PR at the same time, the last commit wi
 This resource does not implement any caching, so it should work well with webhooks (should be subscribed to `push` and `pull_request` events).
 One thing to keep in mind however, is that pull requests that are opened from a fork and commits to said fork will not
 generate notifications over the webhook. So if you have a repository with little traffic and expect pull requests from forks,
-you'll need to discover those versions with `check_every: 1m` for instance. `check` in this resource is not a costly operation,
-so normally you should not have to worry about the rate limit.
+ you'll need to discover those versions with `check_every: 1m` for instance. `check` in this resource is not a costly operation,
+ so normally you should not have to worry about the rate limit.
 
 #### `get`
 
 | Parameter            | Required | Example  | Description                                                                        |
-| -------------------- | -------- | -------- | ---------------------------------------------------------------------------------- |
+|----------------------|----------|----------|------------------------------------------------------------------------------------|
 | `skip_download`      | No       | `true`   | Use with `get_params` in a `put` step to do nothing on the implicit get.           |
 | `integration_tool`   | No       | `rebase` | The integration tool to use, `merge`, `rebase` or `checkout`. Defaults to `merge`. |
 | `git_depth`          | No       | `1`      | Shallow clone the repository using the `--depth` Git option                        |
-| `submodules`         | No       | `true`   | Recursively clone git submodules. Defaults to false.                               |
+| `submodules`       | No       | `true` | Recursively clone git submodules. Defaults to false.                        |
 | `list_changed_files` | No       | `true`   | Generate a list of changed files and save alongside metadata                       |
-| `fetch_tags`         | No       | `true`   | Fetch tags from remote repository                                                  |
+| `fetch_tags`       | No       | `true`     | Fetch tags from remote repository                                                  |
 
 Clones the base (e.g. `master` branch) at the latest commit, and merges the pull request at the specified commit
 into master. This ensures that we are both testing and setting status on the exact commit that was requested in
 input. Because the base of the PR is not locked to a specific commit in versions emitted from `check`, a fresh
-`get` will always use the latest commit in master and _report the SHA of said commit in the metadata_. Both the
+`get` will always use the latest commit in master and *report the SHA of said commit in the metadata*. Both the
 requested version and the metadata emitted by `get` are available to your tasks as JSON:
-
 - `.git/resource/version.json`
 - `.git/resource/metadata.json`
 - `.git/resource/changed_files` (if enabled by `list_changed_files`)
@@ -100,22 +98,23 @@ Example here:
 put: update-status <-- Use an alias for the pull-request resource
 resource: pull-request
 params:
-  path: pull-request
-  status: pending
-get_params: { skip_download: true }
+    path: pull-request
+    status: pending
+get_params: {skip_download: true}
 ```
 
 git-crypt encrypted repositories will automatically be decrypted when the `git_crypt_key` is set in the source configuration.
 
 Note that, should you retrigger a build in the hopes of testing the last commit to a PR against a newer version of
 the base, Concourse will reuse the volume (i.e. not trigger a new `get`) if it still exists, which can produce
-unexpected results (#5). As such, re-testing a PR against a newer version of the base is best done by _pushing an
-empty commit to the PR_.
+unexpected results (#5). As such, re-testing a PR against a newer version of the base is best done by *pushing an
+empty commit to the PR*.
+
 
 #### `put`
 
 | Parameter                  | Required | Example                              | Description                                                                                                                                                   |
-| -------------------------- | -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|----------------------------|----------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `path`                     | Yes      | `pull-request`                       | The name given to the resource in a GET step.                                                                                                                 |
 | `status`                   | No       | `SUCCESS`                            | Set a status on a commit. One of `SUCCESS`, `PENDING`, `FAILURE` and `ERROR`.                                                                                 |
 | `base_context`             | No       | `concourse-ci`                       | Base context (prefix) used for the status context. Defaults to `concourse-ci`.                                                                                |
@@ -134,87 +133,83 @@ See https://concourse-ci.org/implementing-resource-types.html#resource-metadata 
 
 ```yaml
 resource_types:
-  - name: pull-request
-    type: docker-image
-    source:
-      repository: teliaoss/github-pr-resource
+- name: pull-request
+  type: docker-image
+  source:
+    repository: teliaoss/github-pr-resource
 
 resources:
-  - name: pull-request
-    type: pull-request
-    check_every: 24h
-    webhook_token: ((webhook-token))
-    source:
-      repository: itsdalmo/test-repository
-      access_token: ((github-access-token))
+- name: pull-request
+  type: pull-request
+  check_every: 24h
+  webhook_token: ((webhook-token))
+  source:
+    repository: itsdalmo/test-repository
+    access_token: ((github-access-token))
 
 jobs:
-  - name: test
-    plan:
-      - get: pull-request
-        trigger: true
-        version: every
-      - put: pull-request
-        params:
-          path: pull-request
-          status: pending
-      - task: unit-test
-        config:
-          platform: linux
-          image_resource:
-            type: docker-image
-            source: { repository: alpine/git, tag: "latest" }
-          inputs:
-            - name: pull-request
-          run:
-            path: /bin/sh
-            args:
-              - -xce
-              - |
-                cd pull-request
-                git log --graph --all --color --pretty=format:"%x1b[31m%h%x09%x1b[32m%d%x1b[0m%x20%s" > log.txt
-                cat log.txt
-        on_failure:
-          put: pull-request
-          params:
-            path: pull-request
-            status: failure
-      - put: pull-request
-        params:
-          path: pull-request
-          status: success
+- name: test
+  plan:
+  - get: pull-request
+    trigger: true
+    version: every
+  - put: pull-request
+    params:
+      path: pull-request
+      status: pending
+  - task: unit-test
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source: {repository: alpine/git, tag: "latest"}
+      inputs:
+        - name: pull-request
+      run:
+        path: /bin/sh
+        args:
+          - -xce
+          - |
+            cd pull-request
+            git log --graph --all --color --pretty=format:"%x1b[31m%h%x09%x1b[32m%d%x1b[0m%x20%s" > log.txt
+            cat log.txt
+    on_failure:
+      put: pull-request
+      params:
+        path: pull-request
+        status: failure
+  - put: pull-request
+    params:
+      path: pull-request
+      status: success
 ```
 
 ## Costs
 
 The Github API(s) have a rate limit of 5000 requests per hour (per user). For the V3 API this essentially
-translates to 5000 requests, whereas for the V4 API (GraphQL) the calculation is more involved:
+translates to 5000 requests, whereas for the V4 API (GraphQL)  the calculation is more involved:
 https://developer.github.com/v4/guides/resource-limitations/#calculating-a-rate-limit-score-before-running-the-call
 
 Ref the above, here are some examples of running `check` against large repositories and the cost of doing so:
-
 - [concourse/concourse](https://github.com/concourse/concourse): 51 open pull requests at the time of testing. Cost 2.
 - [torvalds/linux](https://github.com/torvalds/linux): 305 open pull requests. Cost 8.
 - [kubernetes/kubernetes](https://github.com/kubernetes/kubernetes): 1072 open pull requests. Cost: 22.
 
 For the other two operations the costing is a bit easier:
-
 - `get`: Fixed cost of 1. Fetches the pull request at the given commit.
 - `put`: Uses the V3 API and has a min cost of 1, +1 for each of `status`, `comment` and `comment_file` etc.
 
 ## Migrating
 
-If you are coming from [jtarchie/github-pullrequest-resource][original-resource], its important to know that this resource is inspired by _but not a drop-in replacement for_ the original. Here are some important differences:
+If you are coming from [jtarchie/github-pullrequest-resource][original-resource], its important to know that this resource is inspired by *but not a drop-in replacement for* the original. Here are some important differences:
 
 #### New parameters:
-
 - `source`:
   - `v4_endpoint` (see description above)
 - `put`:
   - `comment` (see description above)
 
 #### Parameters that have been renamed:
-
 - `source`:
   - `repo` -> `repository`
   - `ci_skip` -> `disable_ci_skip` (the logic has been inverted and its `true` by default)
@@ -228,7 +223,6 @@ If you are coming from [jtarchie/github-pullrequest-resource][original-resource]
   - `comment` -> `comment_file` (because we added `comment`)
 
 #### Parameters that are no longer needed:
-
 - `src`:
   - `uri`: We fetch the URI directly from the Github API instead.
   - `private_key`: We clone over HTTPS using the access token for authentication.
@@ -239,7 +233,6 @@ If you are coming from [jtarchie/github-pullrequest-resource][original-resource]
   - `fetch_merge`: We are opinionated and always do a fetch_merge.
 
 #### Parameters that did not make it:
-
 - `src`:
   - `authorship_restriction`
   - `label`
