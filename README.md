@@ -8,7 +8,14 @@
 [original-resource]: https://github.com/jtarchie/github-pullrequest-resource
 
 A Concourse resource for pull requests on Github. Written in Go and based on the [Github V4 (GraphQL) API][graphql-api].
-Inspired by [the original][original-resource], with some important differences:
+
+This is based on the latest [telia-oss/github-pr-resource](https://github.com/telia-oss/github-pr-resource), but with a few features on top:
+
+- on-disk HTTP caching of GitHub API calls ([7d31bf1](https://github.com/opendoor-labs/github-pr-resource/commit/7d31bf1))
+- adds `status_filter` field used on a few of our pipelines (#2)
+- fixes pagination date bug (#6)
+
+telia-oss/github-pr-resource is itself inspired by [the original][original-resource], with some important differences:
 
 - Github V4: `check` only requires 1 API call per 100th *open* pull request. (See [#costs](#costs) for more information).
 - Fetch/merge: `get` will always merge a specific commit from the Pull request into the latest base.
