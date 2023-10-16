@@ -27,6 +27,7 @@ import (
 const diskCacheFolder = "github-api-cache"
 
 // Github for testing purposes.
+//
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o fakes/fake_github.go . Github
 type Github interface {
 	ListPullRequests([]githubv4.PullRequestState) ([]*PullRequest, error)
@@ -288,6 +289,10 @@ func (m *GithubClient) GetChangedFiles(prNumber string, commitRef string) ([]Cha
 
 // GetPullRequest ...
 func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest, error) {
+	commitsLast := 100
+	if commitRef == "" {
+		commitsLast = 1
+	}
 	pr, err := strconv.Atoi(prNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert pull request number to int: %s", err)
@@ -312,7 +317,7 @@ func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest,
 		"repositoryOwner": githubv4.String(m.Owner),
 		"repositoryName":  githubv4.String(m.Repository),
 		"prNumber":        githubv4.Int(pr),
-		"commitsLast":     githubv4.Int(100),
+		"commitsLast":     githubv4.Int(commitsLast),
 	}
 
 	// TODO: Pagination - in case someone pushes > 100 commits before the build has time to start :p
@@ -321,7 +326,7 @@ func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest,
 	}
 
 	for _, c := range query.Repository.PullRequest.Commits.Edges {
-		if c.Node.Commit.OID == commitRef {
+		if commitRef == "" || c.Node.Commit.OID == commitRef {
 			// Return as soon as we find the correct ref.
 			return &PullRequest{
 				PullRequestObject: query.Repository.PullRequest.PullRequestObject,

@@ -13,7 +13,11 @@ import (
 	"strings"
 )
 
+const DefaultGitDepth int = 1
+const MaxGitDepth int = 10000
+
 // Git interface for testing purposes.
+//
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o fakes/fake_git.go . Git
 type Git interface {
 	Init(string) error
@@ -35,17 +39,23 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 		os.Setenv("GIT_LFS_SKIP_SMUDGE", "true")
 	}
 	return &GitClient{
-		AccessToken: source.AccessToken,
-		Directory:   dir,
-		Output:      output,
+		AccessToken:           source.AccessToken,
+		AccessTokenAdditional: source.AccessTokenAdditional,
+		DataDogApiKey:         source.DataDogApiKey,
+		DataDogAppKey:         source.DataDogAppKey,
+		Directory:             dir,
+		Output:                output,
 	}, nil
 }
 
 // GitClient ...
 type GitClient struct {
-	AccessToken string
-	Directory   string
-	Output      io.Writer
+	AccessToken           string
+	AccessTokenAdditional []string
+	DataDogApiKey         string
+	DataDogAppKey         string
+	Directory             string
+	Output                io.Writer
 }
 
 func (g *GitClient) command(name string, arg ...string) *exec.Cmd {
@@ -233,4 +243,14 @@ func (g *GitClient) Endpoint(uri string) (string, error) {
 	}
 	endpoint.User = url.UserPassword("x-oauth-basic", g.AccessToken)
 	return endpoint.String(), nil
+}
+
+func getRateLimit(request GetRequest) (string, error) {
+	command := fmt.Sprintf("curl -s https://api.github.com/rate_limit -H \"Authorization: token %s\" 2>&1", request.Source.AccessToken)
+	out, err := exec.Command("sh", "-c", command).Output()
+	outTrim := strings.TrimSpace(fmt.Sprintf("%s", out))
+	if err != nil {
+		return "", fmt.Errorf("curl error : %s", err)
+	}
+	return outTrim, nil
 }

@@ -4,20 +4,47 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Get (business logic)
 func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResponse, error) {
+	if request.Params.GitDepth == 0 {
+		request.Params.GitDepth = DefaultGitDepth
+	}
 	if request.Params.SkipDownload {
 		return &GetResponse{Version: request.Version}, nil
 	}
-
+	log.Printf("outputDir %s\n", outputDir)
 	pull, err := github.GetPullRequest(request.Version.PR, request.Version.Commit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve pull request: %s", err)
+	}
+	log.Printf("Pull request number : %d, commit : %s\n", pull.Number, request.Version.Commit)
+
+	rateLimit, err := getRateLimit(request)
+	// TODO reduce the output and only printed selected fields
+	log.Printf("rateLimit : %s\n", rateLimit)
+
+	if request.Source.AccessTokenAdditional == nil {
+		log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
+	} else {
+		// TODO
+		// Implement something like:
+		// https://github.com/opendoor-labs/code/blob/e9a86dd8/.github/workflows/merge-gatekeeper.yaml#L57
+		// after an appropriate token has been found in the AccessTokenAdditional list
+		// set g.AccessToken = g.AccessTokenAdditional[foundIndexWithRateLimitRemainingOver500]
+		log.Printf("Detected that the length of AccessTokenAdditional list is %d ... TODO (not implemented yet) loop thru AccessTokenAdditional if AccessToken is exhausted due to rate limiting\n",
+			len(request.Source.AccessTokenAdditional))
+	}
+	// TODO send to datadog the rateLimit remaining
+	if (request.Source.DataDogApiKey != "") && (request.Source.DataDogAppKey != "") {
+		log.Printf("DataDogApiKey and DataDogAppKey were supplied.  TODO, send metrics\n")
 	}
 
 	// Initialize and pull the base for the PR
@@ -87,7 +114,65 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 			return nil, err
 		}
 	case "merge", "":
-		if err := git.Merge(pull.Tip.OID, request.Params.Submodules); err != nil {
+		log.Printf("BEGIN merge")
+		var command, outTrim string
+		var out []byte
+		var cmdErr error
+		var useLatestPRCommit bool
+		for {
+			err = git.Merge(pull.Tip.OID, request.Params.Submodules)
+			if err == nil {
+				log.Printf("Sweet ... no errors with merge after depth of %d\n", request.Params.GitDepth)
+				break
+			} else if request.Params.GitDepth >= MaxGitDepth {
+				break
+			} else {
+				log.Printf("Error : %s with Merge %s on depth : %d\n", err, pull.Tip.OID, request.Params.GitDepth)
+				log.Printf("Performing merge abort ...")
+				command = fmt.Sprintf("cd %s && git merge --abort 2>&1", outputDir)
+				out, cmdErr = exec.Command("sh", "-c", command).Output()
+				outTrim = strings.TrimSpace(fmt.Sprintf("%s", out))
+				log.Printf("command : %s returned: %s\n", command, outTrim)
+
+				request.Params.GitDepth *= 2
+				log.Printf("deepening fetch to reach pullNumber : %d with depth : %d\n", pull.Number, request.Params.GitDepth)
+
+				if !useLatestPRCommit {
+					useLatestPRCommit = true
+					// get last pr commit
+					pull, _ := github.GetPullRequest(request.Version.PR, "")
+					log.Printf("using last pr commit : %s, CommittedDate : %s\n", pull.Tip.OID, pull.Tip.CommittedDate)
+					request.Version.Commit = pull.Tip.OID
+				}
+
+				// pull branch
+				// note calling git.Pull(pull.Repository.URL, pull.BaseRefName, request.Params.GitDepth, request.Params.Submodules, request.Params.FetchTags)
+				// again won't work as that calls git remote add ...
+				// honestly, although most of this resourceType is written in Go ... underneath it uses exec ... which begs the question
+				// shouldn't this have been written in Bash?
+				command = fmt.Sprintf("cd %s && git pull --depth %d origin %s", outputDir, request.Params.GitDepth, pull.BaseRefName)
+				out, cmdErr = exec.Command("sh", "-c", command).Output()
+				outTrim = strings.TrimSpace(fmt.Sprintf("%s", out))
+				log.Printf("command : %s returned: %s\n", command, outTrim)
+				if cmdErr != nil {
+					log.Printf("commandErr : %s", cmdErr)
+				}
+
+				// fetch pull
+				command = getFetchCommand(git, outputDir, pull.Number, request.Params.GitDepth, false)
+				commandRedacted := getFetchCommand(git, outputDir, pull.Number, request.Params.GitDepth, true)
+				out, cmdErr = exec.Command("sh", "-c", command).Output()
+				outTrim = strings.TrimSpace(fmt.Sprintf("%s", out))
+				if cmdErr != nil {
+					log.Printf("commandErr : %s, command : %s\n", cmdErr, commandRedacted)
+				}
+				log.Printf("command : %s returned: %s\n", commandRedacted, outTrim)
+				log.Printf("==================================================================================\n")
+			}
+		}
+		log.Printf("END merge")
+		if err != nil {
+			log.Printf("merge failed after depth of %d (maxDepth : %d), returning err %s\n", request.Params.GitDepth, MaxGitDepth, err)
 			return nil, err
 		}
 	case "checkout":
@@ -126,6 +211,18 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 		Version:  request.Version,
 		Metadata: metadata,
 	}, nil
+}
+
+func getFetchCommand(git Git, buildDir string, pullNumber int, gitDepth int, redacted bool) string {
+	var gitOrigin string
+	if redacted {
+		gitOrigin = "https://redacted"
+	} else {
+		originCommand := fmt.Sprintf("cd %s && git ls-remote --get-url origin", buildDir)
+		out, _ := exec.Command("sh", "-c", originCommand).Output()
+		gitOrigin = strings.TrimSpace(fmt.Sprintf("%s", out))
+	}
+	return fmt.Sprintf("cd %s && git fetch %s pull/%d/head --depth %d 2>&1", buildDir, gitOrigin, pullNumber, gitDepth)
 }
 
 // GetParameters ...

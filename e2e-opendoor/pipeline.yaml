@@ -1,0 +1,80 @@
+################
+# YAML anchors #
+################
+opendoor_yaml_definitions: 
+  # experimental/wip feature (low risk) even if this does get committed
+  # I'm paving myself for my next JIRA ticket ;)
+  access_token_additional: &access_token_additional
+    - notFullyWorkingButAnExperiment
+    - ((github-token-concourse-1))
+    - ((github-token-concourse-2))
+    - ((github-token-concourse-3))
+    - ((github-token-concourse-4))
+    - anotherIdeaIsToHaveACronJobCreateTokensSortedByHighestRateLimitAvailability
+    - proposedTokenFromACronJobWithHighestRateLimitAvailability
+    - proposedTokenFromACronJobWithSecondHighestRateLimitAvailability
+    - proposedTokenFromACronJobWithThirdHighestRateLimitAvailability
+  image_resource: &dev-tools
+    name: ""
+    source:
+      password: ((dockerhub-password))
+      repository: opendoor/dev-tools
+      username: ((dockerhub-username))
+    type: docker-image
+
+####################
+## Resource Types ##
+####################
+resource_types:
+  - name: od-pull-request
+    type: docker-image
+    source:     
+      repository: opendoor/telia-oss-github-pr-resource
+      # stored in vault concourse/shared
+      # most likely 'dev' if you are doing a code review ;)
+      tag: ((od-github-pr-resource-tag))
+
+###############
+## Resources ##
+###############
+resources:
+  - name: pr-branch
+    type: od-pull-request
+    source:
+      access_token: ((github-token))
+      access_token_additional: *access_token_additional
+      # WIP metrics ... placeholder for now
+      datadog_api_key: ((datadog-api-key))
+      datadog_app_key: ((datadog-app-key))
+      base_branch: master
+      repository: opendoor-labs/code
+
+##########
+## Jobs ##
+##########
+jobs:
+  - name: sample-opendoor-github-pr-resource
+    # run multiple jobs in parallel
+    serial: false
+    plan:
+      - get: pr-branch
+        trigger: true
+        # I changed the code for version: latest
+        # this feature isn't commented very well
+        version: every
+      - config:
+          image_resource: *dev-tools
+          inputs:
+          - name: pr-branch
+          platform: linux
+          run:
+            args:
+            - -c
+            - |-
+              echo "Hello World"
+              pwd
+              ls -l
+              ls -l pr-branch
+            path: bash
+        task: list-files  
+  

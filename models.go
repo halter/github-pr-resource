@@ -18,6 +18,9 @@ type StatusFilter struct {
 type Source struct {
 	Repository              string                      `json:"repository"`
 	AccessToken             string                      `json:"access_token"`
+	AccessTokenAdditional   []string                    `json:"access_token_additional"`
+	DataDogApiKey           string                      `json:"datadog_api_key"`
+	DataDogAppKey           string                      `json:"datadog_app_key"`
 	V3Endpoint              string                      `json:"v3_endpoint"`
 	V4Endpoint              string                      `json:"v4_endpoint"`
 	Paths                   []string                    `json:"paths"`

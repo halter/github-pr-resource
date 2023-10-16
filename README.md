@@ -291,3 +291,8 @@ query {
   }
 }
 ```
+
+
+#### Clone/Fetch
+Clone/fetch is defaulted to a `git_depth` : `1`
+This will double up to a `MaxDepth` if we can't find a common ancestor
