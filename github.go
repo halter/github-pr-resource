@@ -5,9 +5,11 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -52,6 +54,52 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	owner, repository, err := parseRepository(s.Repository)
 	if err != nil {
 		return nil, err
+	}
+	// Github rate limit check
+	// check if the passed AccessToken has availablility
+	// if that threshold is below a certain number
+	// use AccessTokenAdditional
+	log.Printf("current AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+	log.Printf("If the AccessToken starts with 'ghp_', it is a GitHub Personal token\n")
+	log.Printf("If the AccessToken starts with 'ghs_', it is a GitHub App token - which has a higher rateLimit and is more secure\n")
+	coreRemaining, graphqlRemaining, err := getRateLimit(*s)
+	log.Printf("coreRemaining : %d, graphqlRemaining : %d\n", coreRemaining, graphqlRemaining)
+	minRemaining := coreRemaining
+	if graphqlRemaining < minRemaining {
+		minRemaining = graphqlRemaining
+	}
+	var minRemainingThresholdBeforeUsingAccessTokenAdditional = DefaultMinRemainingBeforeUsingAccessTokenAdditional
+	if s.MinRemainingThresholdBeforeUsingAccessTokenAdditional == 0 {
+		log.Printf("source.min_remaining_threshold_before_using_access_token_additional was not supplied in pipeline ... "+
+			"using DefaultMinRemainingBeforeUsingAccessTokenAdditional : %d\n", DefaultMinRemainingBeforeUsingAccessTokenAdditional)
+	} else {
+		log.Printf("using source.min_remaining_threshold_before_using_access_token_additional : %d\n", s.MinRemainingThresholdBeforeUsingAccessTokenAdditional)
+		minRemainingThresholdBeforeUsingAccessTokenAdditional = s.MinRemainingThresholdBeforeUsingAccessTokenAdditional
+	}
+	if s.AccessTokenAdditional == nil {
+		log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
+	} else {
+		log.Printf("Detected that the length of AccessTokenAdditional list is %d\n",
+			len(s.AccessTokenAdditional))
+		log.Printf("minRemaining : %d, minRemainingThresholdBeforeUsingAccessTokenAdditional : %d\n",
+			minRemaining, minRemainingThresholdBeforeUsingAccessTokenAdditional)
+		if minRemaining < minRemainingThresholdBeforeUsingAccessTokenAdditional {
+			log.Printf("minRemaining is < minRemainingThresholdBeforeUsingAccessTokenAdditional ... therefore we will use the AccessTokenAdditional")
+			log.Printf("Hey, this is an attempt to make concourse better so you won't get github rateLimiting issues ;)\n")
+			log.Printf("setting AccessToken to first element in AccessTokenAdditional\n")
+			// TODO altho we are passing a list of AccessTokenAdditional, we will only consider the first element as it is already sorted
+			// by highest remaining ... in the future consider the rest of the list, altho this TODO is a low priority
+			log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+			s.AccessToken = s.AccessTokenAdditional[0]
+			log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+		} else {
+			log.Printf("there is sufficient minRemaining : %d rateLimit.  No need to use AccessTokenAdditional\n", minRemaining)
+		}
+	}
+	// TODO send to datadog the rateLimit remaining
+	if (s.DataDogApiKey != "") && (s.DataDogAppKey != "") {
+		log.Printf("DataDogApiKey and DataDogAppKey were supplied.  TODO, send metrics\n")
+		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesValue : %s\n", s.DataDogMetricName, s.DataDogResourcesName, s.DataDogResourcesValue)
 	}
 
 	diskCachePath := filepath.Join(os.TempDir(), diskCacheFolder)
@@ -428,4 +476,29 @@ func parseRepository(s string) (string, string, error) {
 		return "", "", errors.New("malformed repository")
 	}
 	return parts[0], parts[1], nil
+}
+
+/*
+returns rateLimit for core and rateLimit for graphql
+i.e. github ratelimit has sections for different resources
+*/
+func getRateLimit(source Source) (int, int, error) {
+	command := fmt.Sprintf("curl -s https://api.github.com/rate_limit -H \"Authorization: token %s\" > rateLimit.json", source.AccessToken)
+	_, err := exec.Command("sh", "-c", command).Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("getRateLimit curl error : %s", err)
+	}
+	command = fmt.Sprintf("cat rateLimit.json | jq -r '.resources.core.remaining'")
+	coreRemaining, err := exec.Command("sh", "-c", command).Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("getRateLimit jq error : %s", err)
+	}
+	coreRemainingInt, _ := strconv.Atoi(strings.TrimSpace(fmt.Sprintf("%s", coreRemaining)))
+	command = fmt.Sprintf("cat rateLimit.json | jq -r '.resources.graphql.remaining'")
+	graphqlRemaining, err := exec.Command("sh", "-c", command).Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("getRateLimit jq error : %s", err)
+	}
+	graphqlRemainingInt, _ := strconv.Atoi(strings.TrimSpace(fmt.Sprintf("%s", graphqlRemaining)))
+	return coreRemainingInt, graphqlRemainingInt, nil
 }

@@ -2,18 +2,17 @@
 # YAML anchors #
 ################
 opendoor_yaml_definitions: 
-  # experimental/wip feature (low risk) even if this does get committed
-  # I'm paving myself for my next JIRA ticket ;)
   access_token_additional: &access_token_additional
-    - notFullyWorkingButAnExperiment
-    - ((github-token-concourse-1))
-    - ((github-token-concourse-2))
-    - ((github-token-concourse-3))
-    - ((github-token-concourse-4))
-    - anotherIdeaIsToHaveACronJobCreateTokensSortedByHighestRateLimitAvailability
-    - proposedTokenFromACronJobWithHighestRateLimitAvailability
-    - proposedTokenFromACronJobWithSecondHighestRateLimitAvailability
-    - proposedTokenFromACronJobWithThirdHighestRateLimitAvailability
+    - ((github-token-from-app-1))
+    - ((github-token-from-app-2))
+    - ((github-token-from-app-3))
+    - ((github-token-from-app-4))
+    - ((github-token-from-app-5))
+    - ((github-token-from-app-6))
+    - ((github-token-from-app-7))
+    - ((github-token-from-app-8))
+    - ((github-token-from-app-9))
+    - ((github-token-from-app-10))
   image_resource: &dev-tools
     name: ""
     source:
@@ -43,6 +42,9 @@ resources:
     source:
       access_token: ((github-token))
       access_token_additional: *access_token_additional
+      # for testing purposes ... realistically, we should never set min_remaining_threshold_before_using_access_token_additional
+      # and use the default defined in git.go
+      min_remaining_threshold_before_using_access_token_additional : 20000
       # WIP metrics ... placeholder for now
       datadog_api_key: ((datadog-api-key))
       datadog_app_key: ((datadog-app-key))

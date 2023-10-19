@@ -15,6 +15,7 @@ import (
 
 const DefaultGitDepth int = 1
 const MaxGitDepth int = 10000
+const DefaultMinRemainingBeforeUsingAccessTokenAdditional = 200
 
 // Git interface for testing purposes.
 //
@@ -41,8 +42,12 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 	return &GitClient{
 		AccessToken:           source.AccessToken,
 		AccessTokenAdditional: source.AccessTokenAdditional,
+		MinRemainingThresholdBeforeUsingAccessTokenAdditional: source.MinRemainingThresholdBeforeUsingAccessTokenAdditional,
 		DataDogApiKey:         source.DataDogApiKey,
 		DataDogAppKey:         source.DataDogAppKey,
+		DataDogMetricName:     source.DataDogMetricName,
+		DataDogResourcesName:  source.DataDogResourcesName,
+		DataDogResourcesValue: source.DataDogResourcesValue,
 		Directory:             dir,
 		Output:                output,
 	}, nil
@@ -50,12 +55,16 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 
 // GitClient ...
 type GitClient struct {
-	AccessToken           string
-	AccessTokenAdditional []string
-	DataDogApiKey         string
-	DataDogAppKey         string
-	Directory             string
-	Output                io.Writer
+	AccessToken                                           string
+	AccessTokenAdditional                                 []string
+	MinRemainingThresholdBeforeUsingAccessTokenAdditional int
+	DataDogApiKey                                         string
+	DataDogAppKey                                         string
+	DataDogMetricName                                     string
+	DataDogResourcesName                                  string
+	DataDogResourcesValue                                 string
+	Directory                                             string
+	Output                                                io.Writer
 }
 
 func (g *GitClient) command(name string, arg ...string) *exec.Cmd {
@@ -241,16 +250,9 @@ func (g *GitClient) Endpoint(uri string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to parse commit url: %s", err)
 	}
+	// wow, having an username as anythingWorks, works.  I guess this makes sense
+	// as the token is probably a hash to an user or app on the server
+	//endpoint.User = url.UserPassword("anythingWorks", g.AccessToken)
 	endpoint.User = url.UserPassword("x-oauth-basic", g.AccessToken)
 	return endpoint.String(), nil
-}
-
-func getRateLimit(request GetRequest) (string, error) {
-	command := fmt.Sprintf("curl -s https://api.github.com/rate_limit -H \"Authorization: token %s\" 2>&1", request.Source.AccessToken)
-	out, err := exec.Command("sh", "-c", command).Output()
-	outTrim := strings.TrimSpace(fmt.Sprintf("%s", out))
-	if err != nil {
-		return "", fmt.Errorf("curl error : %s", err)
-	}
-	return outTrim, nil
 }

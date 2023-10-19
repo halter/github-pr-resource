@@ -27,26 +27,6 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	}
 	log.Printf("Pull request number : %d, commit : %s\n", pull.Number, request.Version.Commit)
 
-	rateLimit, err := getRateLimit(request)
-	// TODO reduce the output and only printed selected fields
-	log.Printf("rateLimit : %s\n", rateLimit)
-
-	if request.Source.AccessTokenAdditional == nil {
-		log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
-	} else {
-		// TODO
-		// Implement something like:
-		// https://github.com/opendoor-labs/code/blob/e9a86dd8/.github/workflows/merge-gatekeeper.yaml#L57
-		// after an appropriate token has been found in the AccessTokenAdditional list
-		// set g.AccessToken = g.AccessTokenAdditional[foundIndexWithRateLimitRemainingOver500]
-		log.Printf("Detected that the length of AccessTokenAdditional list is %d ... TODO (not implemented yet) loop thru AccessTokenAdditional if AccessToken is exhausted due to rate limiting\n",
-			len(request.Source.AccessTokenAdditional))
-	}
-	// TODO send to datadog the rateLimit remaining
-	if (request.Source.DataDogApiKey != "") && (request.Source.DataDogAppKey != "") {
-		log.Printf("DataDogApiKey and DataDogAppKey were supplied.  TODO, send metrics\n")
-	}
-
 	// Initialize and pull the base for the PR
 	if err := git.Init(pull.BaseRefName); err != nil {
 		return nil, err

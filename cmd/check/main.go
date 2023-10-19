@@ -33,4 +33,5 @@ func main() {
 	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		log.Fatalf("failed to marshal response: %s", err)
 	}
+	log.Printf("Thanks for using opendoor's https://github.com/opendoor-labs/github-pr-resource\n")
 }
