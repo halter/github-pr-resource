@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,7 +15,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/google/go-github/github"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
@@ -63,7 +67,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	log.Printf("If the AccessToken starts with 'ghp_', it is a GitHub Personal token\n")
 	log.Printf("If the AccessToken starts with 'ghs_', it is a GitHub App token - which has a higher rateLimit and is more secure\n")
 	coreRemaining, graphqlRemaining, err := getRateLimit(*s)
-	log.Printf("coreRemaining : %d, graphqlRemaining : %d\n", coreRemaining, graphqlRemaining)
+	log.Printf("Github rateLimit coreRemaining : %d, graphqlRemaining : %d\n", coreRemaining, graphqlRemaining)
 	minRemaining := coreRemaining
 	if graphqlRemaining < minRemaining {
 		minRemaining = graphqlRemaining
@@ -92,14 +96,11 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 			log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
 			s.AccessToken = s.AccessTokenAdditional[0]
 			log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+			PrintCurrentRateLimit(*s)
+			sendToDataDog(s)
 		} else {
 			log.Printf("there is sufficient minRemaining : %d rateLimit.  No need to use AccessTokenAdditional\n", minRemaining)
 		}
-	}
-	// TODO send to datadog the rateLimit remaining
-	if (s.DataDogApiKey != "") && (s.DataDogAppKey != "") {
-		log.Printf("DataDogApiKey and DataDogAppKey were supplied.  TODO, send metrics\n")
-		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesValue : %s\n", s.DataDogMetricName, s.DataDogResourcesName, s.DataDogResourcesValue)
 	}
 
 	diskCachePath := filepath.Join(os.TempDir(), diskCacheFolder)
@@ -155,6 +156,67 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 		Owner:      owner,
 		Repository: repository,
 	}, nil
+}
+
+// sending metrics to datadog
+func sendToDataDog(s *Source) {
+	if (s.DataDogApiKey != "") && (s.DataDogAppKey != "") {
+		log.Printf("DataDogApiKey and DataDogAppKey were supplied\n")
+		if s.DataDogMetricName == "" {
+			s.DataDogMetricName = DefaultDataDogMetricName
+		}
+		if s.DataDogResourcesName == "" {
+			s.DataDogResourcesName = DefaultDataDogResourcesName
+		}
+		if s.DataDogResourcesValue == "" {
+			s.DataDogResourcesValue = DefaultDataDogResourcesValue
+		}
+		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesValue : %s\n", s.DataDogMetricName, s.DataDogResourcesName, s.DataDogResourcesValue)
+		// code borrowed from: https://docs.datadoghq.com/api/latest/metrics/?code-lang=go
+		body := datadogV2.MetricPayload{
+			Series: []datadogV2.MetricSeries{
+				{
+					Metric: s.DataDogMetricName,
+					Type:   datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr(),
+					Points: []datadogV2.MetricPoint{
+						{
+							Timestamp: datadog.PtrInt64(time.Now().Unix()),
+							Value:     datadog.PtrFloat64(1),
+						},
+					},
+					Resources: []datadogV2.MetricResource{
+						{
+							Name: datadog.PtrString(s.DataDogResourcesName),
+							Type: datadog.PtrString(s.DataDogResourcesValue),
+						},
+					},
+				},
+			},
+		}
+		ctx := context.WithValue(
+			context.Background(),
+			datadog.ContextAPIKeys,
+			map[string]datadog.APIKey{
+				"apiKeyAuth": {
+					Key: s.DataDogApiKey,
+				},
+				"appKeyAuth": {
+					Key: s.DataDogAppKey,
+				},
+			},
+		)
+		configuration := datadog.NewConfiguration()
+		apiClient := datadog.NewAPIClient(configuration)
+		api := datadogV2.NewMetricsApi(apiClient)
+		resp, r, err := api.SubmitMetrics(ctx, body, *datadogV2.NewSubmitMetricsOptionalParameters())
+		log.Printf("Submitted metrics to DataDog\n")
+		if err != nil {
+			log.Printf("Error when calling MetricsApi.SubmitMetrics: %s\n", err)
+			log.Printf("Full HTTP response: %v\n", r)
+		}
+		responseContent, _ := json.MarshalIndent(resp, "", "  ")
+		log.Printf("Response from MetricsApi.SubmitMetrics:\n%s\n", responseContent)
+	}
 }
 
 // ListPullRequests gets the last commit on all pull requests with the matching state.
@@ -384,7 +446,7 @@ func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest,
 	}
 
 	// Return an error if the commit was not found
-	return nil, fmt.Errorf("commit with ref '%s' does not exist", commitRef)
+	return nil, fmt.Errorf("commit with ref '%s' does not exist ... with commitsLast : %d", commitRef, commitsLast)
 }
 
 // UpdateCommitStatus for a given commit (not supported by V4 API).
@@ -501,4 +563,13 @@ func getRateLimit(source Source) (int, int, error) {
 	}
 	graphqlRemainingInt, _ := strconv.Atoi(strings.TrimSpace(fmt.Sprintf("%s", graphqlRemaining)))
 	return coreRemainingInt, graphqlRemainingInt, nil
+}
+
+func PrintCurrentRateLimit(source Source) {
+	coreRemaining, graphqlRemaining, err := getRateLimit(source)
+	if err == nil {
+		log.Printf("Github rateLimit coreRemaining : %d, graphqlRemaining : %d\n", coreRemaining, graphqlRemaining)
+	} else {
+		log.Printf("err is %s\n", err)
+	}
 }

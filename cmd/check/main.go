@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/telia-oss/github-pr-resource"
+	resource "github.com/telia-oss/github-pr-resource"
 )
 
 func main() {
@@ -13,11 +13,10 @@ func main() {
 
 	decoder := json.NewDecoder(os.Stdin)
 	decoder.DisallowUnknownFields()
-
 	if err := decoder.Decode(&request); err != nil {
 		log.Fatalf("failed to unmarshal request: %s", err)
 	}
-
+	resource.PrintDebugInput(request.Source, request)
 	if err := request.Source.Validate(); err != nil {
 		log.Fatalf("invalid source configuration: %s", err)
 	}
@@ -29,9 +28,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("check failed: %s", err)
 	}
-
+	resource.PrintCurrentRateLimit(request.Source)
+	resource.PrintDebugOutput(request.Source, response)
 	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		log.Fatalf("failed to marshal response: %s", err)
 	}
-	log.Printf("Thanks for using opendoor's https://github.com/opendoor-labs/github-pr-resource\n")
+	resource.SayThanks()
 }

@@ -25,6 +25,7 @@ type Source struct {
 	DataDogMetricName                                     string                      `json:"datadog_metric_name"`
 	DataDogResourcesName                                  string                      `json:"datadog_resources_name"`
 	DataDogResourcesValue                                 string                      `json:"datadog_resources_value"`
+	Debug                                                 bool                        `json:"debug"`
 	V3Endpoint                                            string                      `json:"v3_endpoint"`
 	V4Endpoint                                            string                      `json:"v4_endpoint"`
 	Paths                                                 []string                    `json:"paths"`

@@ -16,7 +16,9 @@ import (
 const DefaultGitDepth int = 1
 const MaxGitDepth int = 10000
 const DefaultMinRemainingBeforeUsingAccessTokenAdditional = 200
-
+const DefaultDataDogMetricName = "concourse.ci.custom.dynamicAccessToken"
+const DefaultDataDogResourcesName = "source"
+const DefaultDataDogResourcesValue = "concourse" // another value can be GitHubActions
 // Git interface for testing purposes.
 //
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o fakes/fake_git.go . Git
@@ -40,7 +42,7 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 		os.Setenv("GIT_LFS_SKIP_SMUDGE", "true")
 	}
 	return &GitClient{
-		AccessToken:           source.AccessToken,
+		AccessToken:           &source.AccessToken,
 		AccessTokenAdditional: source.AccessTokenAdditional,
 		MinRemainingThresholdBeforeUsingAccessTokenAdditional: source.MinRemainingThresholdBeforeUsingAccessTokenAdditional,
 		DataDogApiKey:         source.DataDogApiKey,
@@ -55,7 +57,7 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 
 // GitClient ...
 type GitClient struct {
-	AccessToken                                           string
+	AccessToken                                           *string
 	AccessTokenAdditional                                 []string
 	MinRemainingThresholdBeforeUsingAccessTokenAdditional int
 	DataDogApiKey                                         string
@@ -74,7 +76,7 @@ func (g *GitClient) command(name string, arg ...string) *exec.Cmd {
 	cmd.Stderr = g.Output
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env,
-		"X_OAUTH_BASIC_TOKEN="+g.AccessToken,
+		"X_OAUTH_BASIC_TOKEN="+*g.AccessToken,
 		"GIT_ASKPASS=/usr/local/bin/askpass.sh")
 	return cmd
 }
@@ -253,6 +255,6 @@ func (g *GitClient) Endpoint(uri string) (string, error) {
 	// wow, having an username as anythingWorks, works.  I guess this makes sense
 	// as the token is probably a hash to an user or app on the server
 	//endpoint.User = url.UserPassword("anythingWorks", g.AccessToken)
-	endpoint.User = url.UserPassword("x-oauth-basic", g.AccessToken)
+	endpoint.User = url.UserPassword("x-oauth-basic", *g.AccessToken)
 	return endpoint.String(), nil
 }

@@ -50,6 +50,7 @@ resources:
       datadog_app_key: ((datadog-app-key))
       base_branch: master
       repository: opendoor-labs/code
+      debug: true
 
 ##########
 ## Jobs ##

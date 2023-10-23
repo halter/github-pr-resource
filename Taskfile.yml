@@ -42,7 +42,8 @@ tasks:
   build:
     desc: Build check/in/out artifacts
     cmds:
-    - task: test
+#   most tests are done e2e-opendoor now    
+#    - task: test
     - task: go-build
       vars: {BINARY: check}
     - task: go-build

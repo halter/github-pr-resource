@@ -17,7 +17,7 @@ func main() {
 	if err := decoder.Decode(&request); err != nil {
 		log.Fatalf("failed to unmarshal request: %s", err)
 	}
-
+	resource.PrintDebugInput(request.Source, request)
 	if len(os.Args) < 2 {
 		log.Fatalf("missing arguments")
 	}
@@ -37,9 +37,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("get failed: %s", err)
 	}
-
+	resource.PrintCurrentRateLimit(request.Source)
+	resource.PrintDebugOutput(request.Source, response)
 	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		log.Fatalf("failed to marshal response: %s", err)
 	}
-	log.Printf("Thanks for using opendoor's https://github.com/opendoor-labs/github-pr-resource\n")
+	resource.SayThanks()
 }
