@@ -15,7 +15,6 @@ opendoor_yaml_definitions:
       - ((github-token-from-app-9))
       - ((github-token-from-app-10))
     min_remaining_threshold_before_using_access_token_additional : 20000
-    # WIP metrics ... placeholder for now
     datadog_api_key: ((datadog-api-key))
     datadog_app_key: ((datadog-app-key))
     debug: true
