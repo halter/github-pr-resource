@@ -1,0 +1,5 @@
+{
+ "value":200,
+ "comment" : "Use a @value-od-github-pr-resource-min-remaining-threshold-before-using-access-token-additional.json where to save the value as an int",
+ "example" : "vault kv put -format=json concourse/shared/od-github-pr-resource-min-remaining-threshold-before-using-access-token-additional @value-od-github-pr-resource-min-remaining-threshold-before-using-access-token-additional.json"
+}
