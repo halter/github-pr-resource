@@ -43,13 +43,13 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 	}
 	return &GitClient{
 		AccessToken:           &source.AccessToken,
-		AccessTokenAdditional: source.AccessTokenAdditional,
-		MinRemainingThresholdBeforeUsingAccessTokenAdditional: source.MinRemainingThresholdBeforeUsingAccessTokenAdditional,
-		DataDogApiKey:         source.DataDogApiKey,
-		DataDogAppKey:         source.DataDogAppKey,
-		DataDogMetricName:     source.DataDogMetricName,
-		DataDogResourcesName:  source.DataDogResourcesName,
-		DataDogResourcesValue: source.DataDogResourcesValue,
+		AccessTokenAdditional: source.OdAdvanced.AccessTokenAdditional,
+		MinRemainingThresholdBeforeUsingAccessTokenAdditional: source.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional,
+		DataDogApiKey:         source.OdAdvanced.DataDogApiKey,
+		DataDogAppKey:         source.OdAdvanced.DataDogAppKey,
+		DataDogMetricName:     source.OdAdvanced.DataDogMetricName,
+		DataDogResourcesName:  source.OdAdvanced.DataDogResourcesName,
+		DataDogResourcesValue: source.OdAdvanced.DataDogResourcesValue,
 		Directory:             dir,
 		Output:                output,
 	}, nil

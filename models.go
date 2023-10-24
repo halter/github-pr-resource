@@ -16,31 +16,35 @@ type StatusFilter struct {
 
 // Source represents the configuration for the resource.
 type Source struct {
-	Repository                                            string                      `json:"repository"`
-	AccessToken                                           string                      `json:"access_token"`
-	AccessTokenAdditional                                 []string                    `json:"access_token_additional"`
-	MinRemainingThresholdBeforeUsingAccessTokenAdditional int                         `json:"min_remaining_threshold_before_using_access_token_additional"`
-	DataDogApiKey                                         string                      `json:"datadog_api_key"`
-	DataDogAppKey                                         string                      `json:"datadog_app_key"`
-	DataDogMetricName                                     string                      `json:"datadog_metric_name"`
-	DataDogResourcesName                                  string                      `json:"datadog_resources_name"`
-	DataDogResourcesValue                                 string                      `json:"datadog_resources_value"`
-	Debug                                                 bool                        `json:"debug"`
-	V3Endpoint                                            string                      `json:"v3_endpoint"`
-	V4Endpoint                                            string                      `json:"v4_endpoint"`
-	Paths                                                 []string                    `json:"paths"`
-	IgnorePaths                                           []string                    `json:"ignore_paths"`
-	DisableCISkip                                         bool                        `json:"disable_ci_skip"`
-	DisableGitLFS                                         bool                        `json:"disable_git_lfs"`
-	SkipSSLVerification                                   bool                        `json:"skip_ssl_verification"`
-	DisableForks                                          bool                        `json:"disable_forks"`
-	IgnoreDrafts                                          bool                        `json:"ignore_drafts"`
-	GitCryptKey                                           string                      `json:"git_crypt_key"`
-	BaseBranch                                            string                      `json:"base_branch"`
-	RequiredReviewApprovals                               int                         `json:"required_review_approvals"`
-	Labels                                                []string                    `json:"labels"`
-	States                                                []githubv4.PullRequestState `json:"states"`
-	StatusFilters                                         []StatusFilter              `json:"status_filters"`
+	Repository              string                      `json:"repository"`
+	AccessToken             string                      `json:"access_token"`
+	OdAdvanced              OdAdvanced                  `json:"od_advanced"`
+	V3Endpoint              string                      `json:"v3_endpoint"`
+	V4Endpoint              string                      `json:"v4_endpoint"`
+	Paths                   []string                    `json:"paths"`
+	IgnorePaths             []string                    `json:"ignore_paths"`
+	DisableCISkip           bool                        `json:"disable_ci_skip"`
+	DisableGitLFS           bool                        `json:"disable_git_lfs"`
+	SkipSSLVerification     bool                        `json:"skip_ssl_verification"`
+	DisableForks            bool                        `json:"disable_forks"`
+	IgnoreDrafts            bool                        `json:"ignore_drafts"`
+	GitCryptKey             string                      `json:"git_crypt_key"`
+	BaseBranch              string                      `json:"base_branch"`
+	RequiredReviewApprovals int                         `json:"required_review_approvals"`
+	Labels                  []string                    `json:"labels"`
+	States                  []githubv4.PullRequestState `json:"states"`
+	StatusFilters           []StatusFilter              `json:"status_filters"`
+}
+
+type OdAdvanced struct {
+	AccessTokenAdditional                                 []string `json:"access_token_additional"`
+	MinRemainingThresholdBeforeUsingAccessTokenAdditional int      `json:"min_remaining_threshold_before_using_access_token_additional"`
+	DataDogApiKey                                         string   `json:"datadog_api_key"`
+	DataDogAppKey                                         string   `json:"datadog_app_key"`
+	DataDogMetricName                                     string   `json:"datadog_metric_name"`
+	DataDogResourcesName                                  string   `json:"datadog_resources_name"`
+	DataDogResourcesValue                                 string   `json:"datadog_resources_value"`
+	Debug                                                 bool     `json:"debug"`
 }
 
 // Validate the source configuration.

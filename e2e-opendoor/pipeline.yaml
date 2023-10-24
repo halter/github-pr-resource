@@ -1,18 +1,24 @@
 ################
 # YAML anchors #
 ################
-opendoor_yaml_definitions: 
-  access_token_additional: &access_token_additional
-    - ((github-token-from-app-1))
-    - ((github-token-from-app-2))
-    - ((github-token-from-app-3))
-    - ((github-token-from-app-4))
-    - ((github-token-from-app-5))
-    - ((github-token-from-app-6))
-    - ((github-token-from-app-7))
-    - ((github-token-from-app-8))
-    - ((github-token-from-app-9))
-    - ((github-token-from-app-10))
+opendoor_yaml_definitions:
+  od_advanced: &od_advanced
+    access_token_additional:
+      - ((github-token-from-app-1))
+      - ((github-token-from-app-2))
+      - ((github-token-from-app-3))
+      - ((github-token-from-app-4))
+      - ((github-token-from-app-5))
+      - ((github-token-from-app-6))
+      - ((github-token-from-app-7))
+      - ((github-token-from-app-8))
+      - ((github-token-from-app-9))
+      - ((github-token-from-app-10))
+    min_remaining_threshold_before_using_access_token_additional : 20000
+    # WIP metrics ... placeholder for now
+    datadog_api_key: ((datadog-api-key))
+    datadog_app_key: ((datadog-app-key))
+    debug: true
   image_resource: &dev-tools
     name: ""
     source:
@@ -31,7 +37,7 @@ resource_types:
       repository: opendoor/telia-oss-github-pr-resource
       # stored in vault concourse/shared
       # most likely 'dev' if you are doing a code review ;)
-      tag: ((od-github-pr-resource-tag))
+      tag: dev
 
 ###############
 ## Resources ##
@@ -41,16 +47,8 @@ resources:
     type: od-pull-request
     source:
       access_token: ((github-token))
-      access_token_additional: *access_token_additional
-      # for testing purposes ... realistically, we should never set min_remaining_threshold_before_using_access_token_additional
-      # and use the default defined in git.go
-      min_remaining_threshold_before_using_access_token_additional : 20000
-      # WIP metrics ... placeholder for now
-      datadog_api_key: ((datadog-api-key))
-      datadog_app_key: ((datadog-app-key))
-      base_branch: master
       repository: opendoor-labs/code
-      debug: true
+      od_advanced: *od_advanced
 
 ##########
 ## Jobs ##

@@ -73,18 +73,18 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 		minRemaining = graphqlRemaining
 	}
 	var minRemainingThresholdBeforeUsingAccessTokenAdditional = DefaultMinRemainingBeforeUsingAccessTokenAdditional
-	if s.MinRemainingThresholdBeforeUsingAccessTokenAdditional == 0 {
+	if s.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional == 0 {
 		log.Printf("source.min_remaining_threshold_before_using_access_token_additional was not supplied in pipeline ... "+
 			"using DefaultMinRemainingBeforeUsingAccessTokenAdditional : %d\n", DefaultMinRemainingBeforeUsingAccessTokenAdditional)
 	} else {
-		log.Printf("using source.min_remaining_threshold_before_using_access_token_additional : %d\n", s.MinRemainingThresholdBeforeUsingAccessTokenAdditional)
-		minRemainingThresholdBeforeUsingAccessTokenAdditional = s.MinRemainingThresholdBeforeUsingAccessTokenAdditional
+		log.Printf("using source.min_remaining_threshold_before_using_access_token_additional : %d\n", s.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional)
+		minRemainingThresholdBeforeUsingAccessTokenAdditional = s.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional
 	}
-	if s.AccessTokenAdditional == nil {
+	if s.OdAdvanced.AccessTokenAdditional == nil {
 		log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
 	} else {
 		log.Printf("Detected that the length of AccessTokenAdditional list is %d\n",
-			len(s.AccessTokenAdditional))
+			len(s.OdAdvanced.AccessTokenAdditional))
 		log.Printf("minRemaining : %d, minRemainingThresholdBeforeUsingAccessTokenAdditional : %d\n",
 			minRemaining, minRemainingThresholdBeforeUsingAccessTokenAdditional)
 		if minRemaining < minRemainingThresholdBeforeUsingAccessTokenAdditional {
@@ -94,7 +94,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 			// TODO altho we are passing a list of AccessTokenAdditional, we will only consider the first element as it is already sorted
 			// by highest remaining ... in the future consider the rest of the list, altho this TODO is a low priority
 			log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
-			s.AccessToken = s.AccessTokenAdditional[0]
+			s.AccessToken = s.OdAdvanced.AccessTokenAdditional[0]
 			log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
 			PrintCurrentRateLimit(*s)
 			sendToDataDog(s)
@@ -160,23 +160,23 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 
 // sending metrics to datadog
 func sendToDataDog(s *Source) {
-	if (s.DataDogApiKey != "") && (s.DataDogAppKey != "") {
+	if (s.OdAdvanced.DataDogApiKey != "") && (s.OdAdvanced.DataDogAppKey != "") {
 		log.Printf("DataDogApiKey and DataDogAppKey were supplied\n")
-		if s.DataDogMetricName == "" {
-			s.DataDogMetricName = DefaultDataDogMetricName
+		if s.OdAdvanced.DataDogMetricName == "" {
+			s.OdAdvanced.DataDogMetricName = DefaultDataDogMetricName
 		}
-		if s.DataDogResourcesName == "" {
-			s.DataDogResourcesName = DefaultDataDogResourcesName
+		if s.OdAdvanced.DataDogResourcesName == "" {
+			s.OdAdvanced.DataDogResourcesName = DefaultDataDogResourcesName
 		}
-		if s.DataDogResourcesValue == "" {
-			s.DataDogResourcesValue = DefaultDataDogResourcesValue
+		if s.OdAdvanced.DataDogResourcesValue == "" {
+			s.OdAdvanced.DataDogResourcesValue = DefaultDataDogResourcesValue
 		}
-		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesValue : %s\n", s.DataDogMetricName, s.DataDogResourcesName, s.DataDogResourcesValue)
+		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesValue : %s\n", s.OdAdvanced.DataDogMetricName, s.OdAdvanced.DataDogResourcesName, s.OdAdvanced.DataDogResourcesValue)
 		// code borrowed from: https://docs.datadoghq.com/api/latest/metrics/?code-lang=go
 		body := datadogV2.MetricPayload{
 			Series: []datadogV2.MetricSeries{
 				{
-					Metric: s.DataDogMetricName,
+					Metric: s.OdAdvanced.DataDogMetricName,
 					Type:   datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr(),
 					Points: []datadogV2.MetricPoint{
 						{
@@ -186,8 +186,8 @@ func sendToDataDog(s *Source) {
 					},
 					Resources: []datadogV2.MetricResource{
 						{
-							Name: datadog.PtrString(s.DataDogResourcesName),
-							Type: datadog.PtrString(s.DataDogResourcesValue),
+							Name: datadog.PtrString(s.OdAdvanced.DataDogResourcesName),
+							Type: datadog.PtrString(s.OdAdvanced.DataDogResourcesValue),
 						},
 					},
 				},
@@ -198,10 +198,10 @@ func sendToDataDog(s *Source) {
 			datadog.ContextAPIKeys,
 			map[string]datadog.APIKey{
 				"apiKeyAuth": {
-					Key: s.DataDogApiKey,
+					Key: s.OdAdvanced.DataDogApiKey,
 				},
 				"appKeyAuth": {
-					Key: s.DataDogAppKey,
+					Key: s.OdAdvanced.DataDogAppKey,
 				},
 			},
 		)
