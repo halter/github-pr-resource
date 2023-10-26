@@ -120,7 +120,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				if !useLatestPRCommit {
 					useLatestPRCommit = true
 					// get last pr commit
-					pull, _ := github.GetPullRequest(request.Version.PR, "")
+					pull, _ := github.GetPullRequest(request.Version.PR, request.Version.Commit)
 					log.Printf("using last pr commit : %s, CommittedDate : %s\n", pull.Tip.OID, pull.Tip.CommittedDate)
 					request.Version.Commit = pull.Tip.OID
 				}

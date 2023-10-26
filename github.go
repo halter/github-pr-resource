@@ -455,7 +455,7 @@ func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest,
 	if err != nil {
 		return pullRequest, err
 	} else {
-		log.Printf("Yikes, GetPullRequest with %d commitsLast returned an error, trying again with a larger commitsLast\n", commitsLast)
+		log.Printf("Yikes, GetPullRequest with %d commitsLast returned an error : %s.  Trying again with a larger commitsLast\n", commitsLast, err)
 		log.Printf("Note that there is a hard-coded last limit in Github's graphql\n")
 		log.Printf("If you still get an error please let Cloud Infra know, but note that this isn't a trival fix\n")
 		log.Printf("Perhaps a rebase on master on your feature branch could fix this\n")
