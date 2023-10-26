@@ -397,9 +397,8 @@ func (m *GithubClient) GetChangedFiles(prNumber string, commitRef string) ([]Cha
 	return cfo, nil
 }
 
-// GetPullRequest ...
-func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest, error) {
-	commitsLast := 100
+func (m *GithubClient) getPullRequestHelper(prNumber, commitRef string, commitsLast int) (*PullRequest, error) {
+	log.Printf("Performing getPullRequestHelper with on prNumber : %s, commitRef : %s, commitsLast : %d\n", prNumber, commitRef, commitsLast)
 	if commitRef == "" {
 		commitsLast = 1
 	}
@@ -446,7 +445,23 @@ func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest,
 	}
 
 	// Return an error if the commit was not found
-	return nil, fmt.Errorf("commit with ref '%s' does not exist ... with commitsLast : %d", commitRef, commitsLast)
+	return nil, fmt.Errorf("pr : %s, commit with ref '%s' does not exist ... with commitsLast : %d", prNumber, commitRef, commitsLast)
+}
+
+// GetPullRequest ...
+func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest, error) {
+	commitsLast := 100
+	pullRequest, err := m.getPullRequestHelper(prNumber, commitRef, commitsLast)
+	if err != nil {
+		return pullRequest, err
+	} else {
+		log.Printf("Yikes, GetPullRequest with %d commitsLast returned an error, trying again with a larger commitsLast\n", commitsLast)
+		log.Printf("Note that there is a hard-coded last limit in Github's graphql\n")
+		log.Printf("If you still get an error please let Cloud Infra know, but note that this isn't a trival fix\n")
+		log.Printf("Perhaps a rebase on master on your feature branch could fix this\n")
+		commitsLast = 250 // seems to be a github limit
+		return m.getPullRequestHelper(prNumber, commitRef, commitsLast)
+	}
 }
 
 // UpdateCommitStatus for a given commit (not supported by V4 API).
