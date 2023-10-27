@@ -450,18 +450,13 @@ func (m *GithubClient) getPullRequestHelper(prNumber, commitRef string, commitsL
 
 // GetPullRequest ...
 func (m *GithubClient) GetPullRequest(prNumber, commitRef string) (*PullRequest, error) {
-	commitsLast := 100
+	commitsLast := 250 // seems to be a github limit
 	pullRequest, err := m.getPullRequestHelper(prNumber, commitRef, commitsLast)
 	if err != nil {
-		return pullRequest, err
-	} else {
-		log.Printf("Yikes, GetPullRequest with %d commitsLast returned an error : %s.  Trying again with a larger commitsLast\n", commitsLast, err)
-		log.Printf("Note that there is a hard-coded last limit in Github's graphql\n")
-		log.Printf("If you still get an error please let Cloud Infra know, but note that this isn't a trival fix\n")
+		log.Printf("Yikes, GetPullRequest with commitRef %s does not exist \n", commitRef)
 		log.Printf("Perhaps a rebase on master on your feature branch could fix this\n")
-		commitsLast = 250 // seems to be a github limit
-		return m.getPullRequestHelper(prNumber, commitRef, commitsLast)
 	}
+	return pullRequest, err
 }
 
 // UpdateCommitStatus for a given commit (not supported by V4 API).
