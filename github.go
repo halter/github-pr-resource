@@ -63,15 +63,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	// check if the passed AccessToken has availablility
 	// if that threshold is below a certain number
 	// use AccessTokenAdditional
-	log.Printf("current AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
-	log.Printf("If the AccessToken starts with 'ghp_', it is a GitHub Personal token\n")
-	log.Printf("If the AccessToken starts with 'ghs_', it is a GitHub App token - which has a higher rateLimit and is more secure\n")
-	coreRemaining, graphqlRemaining, err := getRateLimit(*s)
-	log.Printf("Github rateLimit coreRemaining : %d, graphqlRemaining : %d\n", coreRemaining, graphqlRemaining)
-	minRemaining := coreRemaining
-	if graphqlRemaining < minRemaining {
-		minRemaining = graphqlRemaining
-	}
+	var skipAccessToken = false
 	var minRemainingThresholdBeforeUsingAccessTokenAdditional = DefaultMinRemainingBeforeUsingAccessTokenAdditional
 	if s.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional == 0 {
 		log.Printf("source.min_remaining_threshold_before_using_access_token_additional was not supplied in pipeline ... "+
@@ -79,27 +71,46 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	} else {
 		log.Printf("using source.min_remaining_threshold_before_using_access_token_additional : %d\n", s.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional)
 		minRemainingThresholdBeforeUsingAccessTokenAdditional = s.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional
+		if minRemainingThresholdBeforeUsingAccessTokenAdditional >= 20000 {
+			log.Printf("Skipping accessToken as minRemainingThresholdBeforeUsingAccessTokenAdditional >= 20000")
+			skipAccessToken = true
+		}
 	}
-	if s.OdAdvanced.AccessTokenAdditional == nil {
-		log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
+	log.Printf("current AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+	log.Printf("If the AccessToken starts with 'ghp_', it is a GitHub Personal token\n")
+	log.Printf("If the AccessToken starts with 'ghs_', it is a GitHub App token - which has a higher rateLimit and is more secure\n")
+	if skipAccessToken {
+		s.AccessToken = s.OdAdvanced.AccessTokenAdditional[0]
+		log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+		PrintCurrentRateLimit(*s)
 	} else {
-		log.Printf("Detected that the length of AccessTokenAdditional list is %d\n",
-			len(s.OdAdvanced.AccessTokenAdditional))
-		log.Printf("minRemaining : %d, minRemainingThresholdBeforeUsingAccessTokenAdditional : %d\n",
-			minRemaining, minRemainingThresholdBeforeUsingAccessTokenAdditional)
-		if minRemaining < minRemainingThresholdBeforeUsingAccessTokenAdditional {
-			log.Printf("minRemaining is < minRemainingThresholdBeforeUsingAccessTokenAdditional ... therefore we will use the AccessTokenAdditional")
-			log.Printf("Hey, this is an attempt to make concourse better so you won't get github rateLimiting issues ;)\n")
-			log.Printf("setting AccessToken to first element in AccessTokenAdditional\n")
-			// TODO altho we are passing a list of AccessTokenAdditional, we will only consider the first element as it is already sorted
-			// by highest remaining ... in the future consider the rest of the list, altho this TODO is a low priority
-			log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
-			s.AccessToken = s.OdAdvanced.AccessTokenAdditional[0]
-			log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
-			PrintCurrentRateLimit(*s)
-			sendToDataDog(s)
+		coreRemaining, graphqlRemaining, _ := getRateLimit(*s)
+		log.Printf("Github rateLimit coreRemaining : %d, graphqlRemaining : %d\n", coreRemaining, graphqlRemaining)
+		minRemaining := coreRemaining
+		if graphqlRemaining < minRemaining {
+			minRemaining = graphqlRemaining
+		}
+
+		if s.OdAdvanced.AccessTokenAdditional == nil {
+			log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
 		} else {
-			log.Printf("there is sufficient minRemaining : %d rateLimit.  No need to use AccessTokenAdditional\n", minRemaining)
+			log.Printf("Detected that the length of AccessTokenAdditional list is %d\n",
+				len(s.OdAdvanced.AccessTokenAdditional))
+			log.Printf("minRemaining : %d, minRemainingThresholdBeforeUsingAccessTokenAdditional : %d\n",
+				minRemaining, minRemainingThresholdBeforeUsingAccessTokenAdditional)
+			if minRemaining < minRemainingThresholdBeforeUsingAccessTokenAdditional {
+				log.Printf("minRemaining is < minRemainingThresholdBeforeUsingAccessTokenAdditional ... therefore we will use the AccessTokenAdditional")
+				log.Printf("Hey, this is an attempt to make concourse better so you won't get github rateLimiting issues ;)\n")
+				log.Printf("setting AccessToken to first element in AccessTokenAdditional\n")
+				// TODO altho we are passing a list of AccessTokenAdditional, we will only consider the first element as it is already sorted
+				// by highest remaining ... in the future consider the rest of the list, altho this TODO is a low priority
+				log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+				s.AccessToken = s.OdAdvanced.AccessTokenAdditional[0]
+				log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+				PrintCurrentRateLimit(*s)
+			} else {
+				log.Printf("there is sufficient minRemaining : %d rateLimit.  No need to use AccessTokenAdditional\n", minRemaining)
+			}
 		}
 	}
 
@@ -159,8 +170,22 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 }
 
 // sending metrics to datadog
-func sendToDataDog(s *Source) {
+func SendToDataDog(request GetRequest, err error) {
+	s := request.Source
 	if (s.OdAdvanced.DataDogApiKey != "") && (s.OdAdvanced.DataDogAppKey != "") {
+		var status string = "success"
+		if err != nil {
+			if strings.Contains(err.Error(), "refusing to merge unrelated histories") {
+				status = "refusingToMergeUnrelatedHistories"
+			} else if strings.Contains(err.Error(), "does not exist") {
+				status = "doesNotExist"
+			} else if strings.Contains(err.Error(), "Merge conflict") {
+				status = "mergeConflict"
+			} else {
+				status = "unknown"
+				log.Printf("TODO: map status : %s to a known status.  err.Error() : %s\n", status, err.Error())
+			}
+		}
 		log.Printf("DataDogApiKey and DataDogAppKey were supplied\n")
 		if s.OdAdvanced.DataDogMetricName == "" {
 			s.OdAdvanced.DataDogMetricName = DefaultDataDogMetricName
@@ -168,10 +193,11 @@ func sendToDataDog(s *Source) {
 		if s.OdAdvanced.DataDogResourcesName == "" {
 			s.OdAdvanced.DataDogResourcesName = DefaultDataDogResourcesName
 		}
-		if s.OdAdvanced.DataDogResourcesValue == "" {
-			s.OdAdvanced.DataDogResourcesValue = DefaultDataDogResourcesValue
+		if s.OdAdvanced.DataDogResourcesType == "" {
+			s.OdAdvanced.DataDogResourcesType = DefaultDataDogResourcesType
 		}
-		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesValue : %s\n", s.OdAdvanced.DataDogMetricName, s.OdAdvanced.DataDogResourcesName, s.OdAdvanced.DataDogResourcesValue)
+		log.Printf("DataDogMetricName : %s, DataDogResourcesName : %s, DataDogResourcesType : %s, status : %s\n",
+			s.OdAdvanced.DataDogMetricName, s.OdAdvanced.DataDogResourcesName, s.OdAdvanced.DataDogResourcesType, status)
 		// code borrowed from: https://docs.datadoghq.com/api/latest/metrics/?code-lang=go
 		body := datadogV2.MetricPayload{
 			Series: []datadogV2.MetricSeries{
@@ -187,7 +213,27 @@ func sendToDataDog(s *Source) {
 					Resources: []datadogV2.MetricResource{
 						{
 							Name: datadog.PtrString(s.OdAdvanced.DataDogResourcesName),
-							Type: datadog.PtrString(s.OdAdvanced.DataDogResourcesValue),
+							Type: datadog.PtrString(s.OdAdvanced.DataDogResourcesType),
+						},
+						{
+							Name: datadog.PtrString(status),
+							Type: datadog.PtrString("status"),
+						},
+						{
+							Name: datadog.PtrString(request.Version.PR),
+							Type: datadog.PtrString("pr"),
+						},
+						{
+							Name: datadog.PtrString(os.Getenv("BUILD_ID")),
+							Type: datadog.PtrString("build_id"),
+						},
+						{
+							Name: datadog.PtrString(os.Getenv("BUILD_NAME")),
+							Type: datadog.PtrString("build_name"),
+						},
+						{
+							Name: datadog.PtrString(os.Getenv("BUILD_PIPELINE_NAME")),
+							Type: datadog.PtrString("build_pipeline_name"),
 						},
 					},
 				},

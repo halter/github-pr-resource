@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -16,9 +17,10 @@ import (
 const DefaultGitDepth int = 1
 const MaxGitDepth int = 10000
 const DefaultMinRemainingBeforeUsingAccessTokenAdditional = 200
-const DefaultDataDogMetricName = "concourse.ci.custom.dynamicAccessToken"
-const DefaultDataDogResourcesName = "source"
-const DefaultDataDogResourcesValue = "concourse" // another value can be GitHubActions
+const DefaultDataDogMetricName = "concourse.ci.custom.github_pr_resource.get.status"
+const DefaultDataDogResourcesName = "concourse" // another value can be GitHubActions
+const DefaultDataDogResourcesType = "source"
+
 // Git interface for testing purposes.
 //
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o fakes/fake_git.go . Git
@@ -45,13 +47,13 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 		AccessToken:           &source.AccessToken,
 		AccessTokenAdditional: source.OdAdvanced.AccessTokenAdditional,
 		MinRemainingThresholdBeforeUsingAccessTokenAdditional: source.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional,
-		DataDogApiKey:         source.OdAdvanced.DataDogApiKey,
-		DataDogAppKey:         source.OdAdvanced.DataDogAppKey,
-		DataDogMetricName:     source.OdAdvanced.DataDogMetricName,
-		DataDogResourcesName:  source.OdAdvanced.DataDogResourcesName,
-		DataDogResourcesValue: source.OdAdvanced.DataDogResourcesValue,
-		Directory:             dir,
-		Output:                output,
+		DataDogApiKey:        source.OdAdvanced.DataDogApiKey,
+		DataDogAppKey:        source.OdAdvanced.DataDogAppKey,
+		DataDogMetricName:    source.OdAdvanced.DataDogMetricName,
+		DataDogResourcesName: source.OdAdvanced.DataDogResourcesName,
+		DataDogResourcesType: source.OdAdvanced.DataDogResourcesType,
+		Directory:            dir,
+		Output:               output,
 	}, nil
 }
 
@@ -64,16 +66,18 @@ type GitClient struct {
 	DataDogAppKey                                         string
 	DataDogMetricName                                     string
 	DataDogResourcesName                                  string
-	DataDogResourcesValue                                 string
+	DataDogResourcesType                                  string
 	Directory                                             string
 	Output                                                io.Writer
 }
+
+var errBuffer bytes.Buffer
 
 func (g *GitClient) command(name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = g.Directory
 	cmd.Stdout = g.Output
-	cmd.Stderr = g.Output
+	cmd.Stderr = io.MultiWriter(g.Output, &errBuffer)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env,
 		"X_OAUTH_BASIC_TOKEN="+*g.AccessToken,
@@ -198,7 +202,9 @@ func (g *GitClient) Checkout(branch, sha string, submodules bool) error {
 // Merge ...
 func (g *GitClient) Merge(sha string, submodules bool) error {
 	if err := g.command("git", "merge", sha, "--no-stat").Run(); err != nil {
-		return fmt.Errorf("merge failed: %s", err)
+		var s = fmt.Sprintf("merge failed: %s %s", err, &errBuffer)
+		errBuffer.Truncate(0)
+		return fmt.Errorf(s)
 	}
 
 	if submodules {

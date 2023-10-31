@@ -43,7 +43,7 @@ type OdAdvanced struct {
 	DataDogAppKey                                         string   `json:"datadog_app_key"`
 	DataDogMetricName                                     string   `json:"datadog_metric_name"`
 	DataDogResourcesName                                  string   `json:"datadog_resources_name"`
-	DataDogResourcesValue                                 string   `json:"datadog_resources_value"`
+	DataDogResourcesType                                  string   `json:"datadog_resources_type"`
 	Debug                                                 bool     `json:"debug"`
 }
 

@@ -12,6 +12,22 @@ import (
 	"strings"
 )
 
+type GetError struct {
+	Context string
+	Err     error
+}
+
+func (getError *GetError) Error() string {
+	return fmt.Sprintf("%s: %v", getError.Context, getError.Err)
+}
+
+func Wrap(err error, info string) *GetError {
+	return &GetError{
+		Context: info,
+		Err:     err,
+	}
+}
+
 // Get (business logic)
 func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResponse, error) {
 	if request.Params.GitDepth == 0 {
@@ -110,8 +126,8 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				log.Printf("Error : %s with Merge %s on depth : %d\n", err, pull.Tip.OID, request.Params.GitDepth)
 				log.Printf("Performing merge abort ...")
 				command = fmt.Sprintf("cd %s && git merge --abort 2>&1", outputDir)
-				out, cmdErr = exec.Command("sh", "-c", command).Output()
-				outTrim = strings.TrimSpace(fmt.Sprintf("%s", out))
+				out, _ = exec.Command("sh", "-c", command).CombinedOutput()
+				outTrim = strings.TrimSpace(string(out))
 				log.Printf("command : %s returned: %s\n", command, outTrim)
 
 				request.Params.GitDepth *= 2
@@ -131,8 +147,8 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				// honestly, although most of this resourceType is written in Go ... underneath it uses exec ... which begs the question
 				// shouldn't this have been written in Bash?
 				command = fmt.Sprintf("cd %s && git pull --depth %d origin %s", outputDir, request.Params.GitDepth, pull.BaseRefName)
-				out, cmdErr = exec.Command("sh", "-c", command).Output()
-				outTrim = strings.TrimSpace(fmt.Sprintf("%s", out))
+				out, cmdErr = exec.Command("sh", "-c", command).CombinedOutput()
+				outTrim = strings.TrimSpace(string(out))
 				log.Printf("command : %s returned: %s\n", command, outTrim)
 				if cmdErr != nil {
 					log.Printf("commandErr : %s", cmdErr)
@@ -141,8 +157,8 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				// fetch pull
 				command = getFetchCommand(git, outputDir, pull.Number, request.Params.GitDepth, false)
 				commandRedacted := getFetchCommand(git, outputDir, pull.Number, request.Params.GitDepth, true)
-				out, cmdErr = exec.Command("sh", "-c", command).Output()
-				outTrim = strings.TrimSpace(fmt.Sprintf("%s", out))
+				out, cmdErr = exec.Command("sh", "-c", command).CombinedOutput()
+				outTrim = strings.TrimSpace(string(out))
 				if cmdErr != nil {
 					log.Printf("commandErr : %s, command : %s\n", cmdErr, commandRedacted)
 				}
@@ -153,6 +169,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 		log.Printf("END merge")
 		if err != nil {
 			log.Printf("merge failed after depth of %d (maxDepth : %d), returning err %s\n", request.Params.GitDepth, MaxGitDepth, err)
+			err = Wrap(err, outTrim)
 			return nil, err
 		}
 	case "checkout":
@@ -199,8 +216,8 @@ func getFetchCommand(git Git, buildDir string, pullNumber int, gitDepth int, red
 		gitOrigin = "https://redacted"
 	} else {
 		originCommand := fmt.Sprintf("cd %s && git ls-remote --get-url origin", buildDir)
-		out, _ := exec.Command("sh", "-c", originCommand).Output()
-		gitOrigin = strings.TrimSpace(fmt.Sprintf("%s", out))
+		out, _ := exec.Command("sh", "-c", originCommand).CombinedOutput()
+		gitOrigin = strings.TrimSpace(string(out))
 	}
 	return fmt.Sprintf("cd %s && git fetch %s pull/%d/head --depth %d 2>&1", buildDir, gitOrigin, pullNumber, gitDepth)
 }

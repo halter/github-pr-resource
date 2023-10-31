@@ -4,14 +4,27 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strconv"
 
 	resource "github.com/telia-oss/github-pr-resource"
 )
 
 func main() {
 	var request resource.CheckRequest
-
-	decoder := json.NewDecoder(os.Stdin)
+	var decoder *json.Decoder
+	var localDevelopmentBool = false
+	localDevelopment, localDevelopmentPresent := os.LookupEnv("LOCAL_DEVELOPMENT")
+	if localDevelopmentPresent {
+		localDevelopmentBool, _ = strconv.ParseBool(localDevelopment)
+	}
+	if localDevelopmentBool {
+		// local development (yippee!  Fire up that debugger)
+		reader, _ := os.Open(os.Getenv("REQUEST_JSON"))
+		decoder = json.NewDecoder(reader)
+	} else {
+		// business as usual with original production code logic
+		decoder = json.NewDecoder(os.Stdin)
+	}
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		log.Fatalf("failed to unmarshal request: %s", err)
