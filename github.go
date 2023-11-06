@@ -22,6 +22,8 @@ import (
 	"github.com/google/go-github/github"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
+	vault "github.com/hashicorp/vault/api"
+	auth "github.com/hashicorp/vault/api/auth/approle"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
@@ -80,7 +82,11 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	log.Printf("If the AccessToken starts with 'ghp_', it is a GitHub Personal token\n")
 	log.Printf("If the AccessToken starts with 'ghs_', it is a GitHub App token - which has a higher rateLimit and is more secure\n")
 	if skipAccessToken {
-		s.AccessToken = s.OdAdvanced.AccessTokenAdditional[0]
+		s.AccessToken, err = getAccessTokenFromVault(*s)
+		if err != nil {
+			log.Printf("There is a problem with vault %s\n", err)
+			return nil, err
+		}
 		log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
 		PrintCurrentRateLimit(*s)
 	} else {
@@ -91,11 +97,9 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 			minRemaining = graphqlRemaining
 		}
 
-		if s.OdAdvanced.AccessTokenAdditional == nil {
-			log.Printf("No AccessTokenAdditional, therefore will ALWAYS use the AccessToken supplied\n")
+		if s.OdAdvanced.VaultApproleRoleId == "" {
+			log.Printf("No VaultApproleRoleId, therefore will ALWAYS use the AccessToken supplied\n")
 		} else {
-			log.Printf("Detected that the length of AccessTokenAdditional list is %d\n",
-				len(s.OdAdvanced.AccessTokenAdditional))
 			log.Printf("minRemaining : %d, minRemainingThresholdBeforeUsingAccessTokenAdditional : %d\n",
 				minRemaining, minRemainingThresholdBeforeUsingAccessTokenAdditional)
 			if minRemaining < minRemainingThresholdBeforeUsingAccessTokenAdditional {
@@ -105,7 +109,11 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 				// TODO altho we are passing a list of AccessTokenAdditional, we will only consider the first element as it is already sorted
 				// by highest remaining ... in the future consider the rest of the list, altho this TODO is a low priority
 				log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
-				s.AccessToken = s.OdAdvanced.AccessTokenAdditional[0]
+				s.AccessToken, err = getAccessTokenFromVault(*s)
+				if err != nil {
+					log.Printf("There is a problem with vault %s\n", err)
+					return nil, err
+				}
 				log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
 				PrintCurrentRateLimit(*s)
 			} else {
@@ -177,9 +185,10 @@ func SendToDataDog(request GetRequest, err error) {
 		if err != nil {
 			if strings.Contains(err.Error(), "refusing to merge unrelated histories") {
 				status = "refusingToMergeUnrelatedHistories"
-			} else if strings.Contains(err.Error(), "does not exist") {
+			} else if strings.Contains(err.Error(), "does not exist") ||
+				strings.Contains(err.Error(), "not accessible") {
 				status = "doesNotExist"
-			} else if strings.Contains(err.Error(), "Merge conflict") {
+			} else if strings.Contains(err.Error(), "Automatic merge failed; fix conflicts and then commit the result.") {
 				status = "mergeConflict"
 			} else {
 				status = "unknown"
@@ -628,4 +637,43 @@ func PrintCurrentRateLimit(source Source) {
 	} else {
 		log.Printf("err is %s\n", err)
 	}
+}
+
+func getAccessTokenFromVault(source Source) (string, error) {
+	log.Printf("Retrieving latest github-token (github app) using vault\n")
+	config := vault.DefaultConfig() // modify for more granular configuration
+	config.Address = source.OdAdvanced.VaultAddr
+	client, err := vault.NewClient(config)
+	if err != nil {
+		return "", fmt.Errorf("unable to initialize Vault client: %w", err)
+	}
+	roleID := source.OdAdvanced.VaultApproleRoleId
+	secretID := &auth.SecretID{FromString: source.OdAdvanced.VaultApproleSecretId}
+	appRoleAuth, err := auth.NewAppRoleAuth(
+		roleID,
+		secretID,
+	)
+	if err != nil {
+		return "", fmt.Errorf("unable to initialize AppRole auth method: %w", err)
+	}
+	authInfo, err := client.Auth().Login(context.Background(), appRoleAuth)
+	if err != nil {
+		return "", fmt.Errorf("unable to login to AppRole auth method: %w", err)
+	}
+	if authInfo == nil {
+		return "", fmt.Errorf("no auth info was returned after login")
+	}
+	// hmm client.KVv2() doesn't work, so we'll use v1 of client.Logical()
+	// p.s. and this is exactly why you need to install the go debugger ... frigging hell to debug without it
+	secret, err := client.Logical().Read("concourse/engineering/github-token-from-app-1")
+	if err != nil {
+		return "", fmt.Errorf("unable to read secret: %w", err)
+	}
+	// data map can contain more than one key-value pair,
+	// in this case we're just grabbing one of them
+	value, ok := secret.Data["value"].(string)
+	if !ok {
+		return "", fmt.Errorf("cannot retrieve vault value")
+	}
+	return value, nil
 }

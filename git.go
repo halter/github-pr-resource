@@ -44,8 +44,7 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 		os.Setenv("GIT_LFS_SKIP_SMUDGE", "true")
 	}
 	return &GitClient{
-		AccessToken:           &source.AccessToken,
-		AccessTokenAdditional: source.OdAdvanced.AccessTokenAdditional,
+		AccessToken: &source.AccessToken,
 		MinRemainingThresholdBeforeUsingAccessTokenAdditional: source.OdAdvanced.MinRemainingThresholdBeforeUsingAccessTokenAdditional,
 		DataDogApiKey:        source.OdAdvanced.DataDogApiKey,
 		DataDogAppKey:        source.OdAdvanced.DataDogAppKey,
@@ -60,7 +59,6 @@ func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, err
 // GitClient ...
 type GitClient struct {
 	AccessToken                                           *string
-	AccessTokenAdditional                                 []string
 	MinRemainingThresholdBeforeUsingAccessTokenAdditional int
 	DataDogApiKey                                         string
 	DataDogAppKey                                         string
@@ -201,8 +199,10 @@ func (g *GitClient) Checkout(branch, sha string, submodules bool) error {
 
 // Merge ...
 func (g *GitClient) Merge(sha string, submodules bool) error {
-	if err := g.command("git", "merge", sha, "--no-stat").Run(); err != nil {
-		var s = fmt.Sprintf("merge failed: %s %s", err, &errBuffer)
+	// need to capture stdout and stderr
+	out, err := exec.Command("sh", "-c", fmt.Sprintf("cd %s && git merge %s --no-stat", g.Directory, sha)).CombinedOutput()
+	if err != nil {
+		var s = fmt.Sprintf("merge failed: %s %s %s", err, &errBuffer, out)
 		errBuffer.Truncate(0)
 		return fmt.Errorf(s)
 	}

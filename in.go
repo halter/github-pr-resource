@@ -122,6 +122,9 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				break
 			} else if request.Params.GitDepth >= MaxGitDepth {
 				break
+			} else if strings.Contains(err.Error(), "Automatic merge failed; fix conflicts and then commit the result.") {
+				log.Printf("Exiting early because we have a git conflict %s\n", err.Error())
+				break
 			} else {
 				log.Printf("Error : %s with Merge %s on depth : %d\n", err, pull.Tip.OID, request.Params.GitDepth)
 				log.Printf("Performing merge abort ...")
@@ -169,7 +172,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 		log.Printf("END merge")
 		if err != nil {
 			log.Printf("merge failed after depth of %d (maxDepth : %d), returning err %s\n", request.Params.GitDepth, MaxGitDepth, err)
-			err = Wrap(err, outTrim)
+			err = Wrap(err, outTrim+errBuffer.String())
 			return nil, err
 		}
 	case "checkout":

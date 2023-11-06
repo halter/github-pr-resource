@@ -3,20 +3,12 @@
 ################
 opendoor_yaml_definitions:
   od_advanced: &od_advanced
-    access_token_additional:
-      - ((github-token-from-app-1))
-      - ((github-token-from-app-2))
-      - ((github-token-from-app-3))
-      - ((github-token-from-app-4))
-      - ((github-token-from-app-5))
-      - ((github-token-from-app-6))
-      - ((github-token-from-app-7))
-      - ((github-token-from-app-8))
-      - ((github-token-from-app-9))
-      - ((github-token-from-app-10))
     min_remaining_threshold_before_using_access_token_additional : 20000
     datadog_api_key: ((datadog-api-key))
     datadog_app_key: ((datadog-app-key))
+    vault_addr: ((default_vault_addr))
+    vault_approle_role_id: ((github-vault-approle.vault-app-role-id))
+    vault_approle_secret_id: ((github-vault-approle.vault-app-role-secret))
     debug: true
   image_resource: &dev-tools
     name: ""

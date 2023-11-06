@@ -37,14 +37,16 @@ type Source struct {
 }
 
 type OdAdvanced struct {
-	AccessTokenAdditional                                 []string `json:"access_token_additional"`
-	MinRemainingThresholdBeforeUsingAccessTokenAdditional int      `json:"min_remaining_threshold_before_using_access_token_additional"`
-	DataDogApiKey                                         string   `json:"datadog_api_key"`
-	DataDogAppKey                                         string   `json:"datadog_app_key"`
-	DataDogMetricName                                     string   `json:"datadog_metric_name"`
-	DataDogResourcesName                                  string   `json:"datadog_resources_name"`
-	DataDogResourcesType                                  string   `json:"datadog_resources_type"`
-	Debug                                                 bool     `json:"debug"`
+	VaultAddr                                             string `json:"vault_addr"`
+	VaultApproleRoleId                                    string `json:"vault_approle_role_id"`
+	VaultApproleSecretId                                  string `json:"vault_approle_secret_id"`
+	MinRemainingThresholdBeforeUsingAccessTokenAdditional int    `json:"min_remaining_threshold_before_using_access_token_additional"`
+	DataDogApiKey                                         string `json:"datadog_api_key"`
+	DataDogAppKey                                         string `json:"datadog_app_key"`
+	DataDogMetricName                                     string `json:"datadog_metric_name"`
+	DataDogResourcesName                                  string `json:"datadog_resources_name"`
+	DataDogResourcesType                                  string `json:"datadog_resources_type"`
+	Debug                                                 bool   `json:"debug"`
 }
 
 // Validate the source configuration.

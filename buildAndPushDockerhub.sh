@@ -1,6 +1,6 @@
 export PUSH_FLAG="--push"
 export BUILD_FLAG="buildx build --platform linux/amd64"
-#export TAG=2.0.0
+#export TAG=2.0.2
 export TAG=dev
 export IMAGE=opendoor/telia-oss-github-pr-resource
 if [ "$#" -gt 0 ]
