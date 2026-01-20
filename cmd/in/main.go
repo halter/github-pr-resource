@@ -11,6 +11,13 @@ import (
 	resource "github.com/telia-oss/github-pr-resource"
 )
 
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
 func main() {
 	var request resource.GetRequest
 	var decoder *json.Decoder
@@ -57,6 +64,20 @@ func main() {
 	response, err := resource.Get(request, github, git, outputDir)
 	resource.SendToDataDog(request, err)
 	if err != nil {
+		if request.Params.PostStatusOnGetFailure {
+			log.Printf("posting failure status to GitHub for commit %s", request.Version.Commit)
+			description := fmt.Sprintf("Get failed: %s", truncateString(err.Error(), 100))
+			if statusErr := github.UpdateCommitStatus(
+				request.Version.Commit,
+				request.Params.BaseContext,
+				request.Params.Context,
+				"failure",
+				"",
+				description,
+			); statusErr != nil {
+				log.Printf("failed to post failure status: %s", statusErr)
+			}
+		}
 		log.Fatalf("get failed: %s", err)
 	}
 	resource.PrintCurrentRateLimit(request.Source)

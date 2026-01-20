@@ -239,6 +239,11 @@ type GetParameters struct {
 	Submodules       bool   `json:"submodules"`
 	ListChangedFiles bool   `json:"list_changed_files"`
 	FetchTags        bool   `json:"fetch_tags"`
+
+	// Status reporting on get failure
+	PostStatusOnGetFailure bool   `json:"post_status_on_get_failure"`
+	BaseContext            string `json:"base_context"`
+	Context                string `json:"context"`
 }
 
 // GetRequest ...
