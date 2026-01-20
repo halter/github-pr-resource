@@ -27,13 +27,12 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 		return nil, fmt.Errorf("failed to unmarshal version from file: %s", err)
 	}
 
-	// Metadata available after a GET step.
+	// Metadata available after a GET step (optional - may not exist if get failed early).
 	var metadata Metadata
 	content, err = ioutil.ReadFile(filepath.Join(path, "metadata.json"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read metadata from path: %s", err)
-	}
-	if err := json.Unmarshal(content, &metadata); err != nil {
+		log.Printf("warning: failed to read metadata from path (get step may have failed): %s", err)
+	} else if err := json.Unmarshal(content, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal metadata from file: %s", err)
 	}
 

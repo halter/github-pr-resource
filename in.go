@@ -37,6 +37,20 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 		return &GetResponse{Version: request.Version}, nil
 	}
 	log.Printf("outputDir %s\n", outputDir)
+
+	// Write version.json early so put step can post status even if get fails
+	path := filepath.Join(outputDir, ".git", "resource")
+	if err := os.MkdirAll(path, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create output directory: %s", err)
+	}
+	b, err := json.Marshal(request.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal version: %s", err)
+	}
+	if err := ioutil.WriteFile(filepath.Join(path, "version.json"), b, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write version: %s", err)
+	}
+
 	pull, err := github.GetPullRequest(request.Version.PR, request.Version.Commit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve pull request: %s", err)
@@ -76,18 +90,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	metadata.Add("author_email", pull.Tip.Author.Email)
 	metadata.Add("state", string(pull.State))
 
-	// Write version and metadata for reuse in PUT
-	path := filepath.Join(outputDir, ".git", "resource")
-	if err := os.MkdirAll(path, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %s", err)
-	}
-	b, err := json.Marshal(request.Version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal version: %s", err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(path, "version.json"), b, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write version: %s", err)
-	}
+	// Write metadata for reuse in PUT (version.json already written at start)
 	b, err = json.Marshal(metadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal metadata: %s", err)
