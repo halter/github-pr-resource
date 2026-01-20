@@ -33,9 +33,6 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	if request.Params.GitDepth == 0 {
 		request.Params.GitDepth = DefaultGitDepth
 	}
-	if request.Params.SkipDownload {
-		return &GetResponse{Version: request.Version}, nil
-	}
 	log.Printf("outputDir %s\n", outputDir)
 
 	// Write version.json early so put step can post status even if get fails
@@ -49,6 +46,12 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	}
 	if err := ioutil.WriteFile(filepath.Join(path, "version.json"), b, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write version: %s", err)
+	}
+
+	// If skip_download is set, return early with just the version info (useful for on_failure handlers)
+	if request.Params.SkipDownload {
+		log.Printf("skip_download enabled, returning with version.json only")
+		return &GetResponse{Version: request.Version}, nil
 	}
 
 	pull, err := github.GetPullRequest(request.Version.PR, request.Version.Commit)

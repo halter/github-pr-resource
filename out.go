@@ -27,11 +27,11 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 		return nil, fmt.Errorf("failed to unmarshal version from file: %s", err)
 	}
 
-	// Metadata available after a GET step (optional - may not exist if get failed early).
+	// Metadata available after a GET step (optional - may not exist if get used skip_download).
 	var metadata Metadata
 	content, err = ioutil.ReadFile(filepath.Join(path, "metadata.json"))
 	if err != nil {
-		log.Printf("warning: failed to read metadata from path (get step may have failed): %s", err)
+		log.Printf("warning: failed to read metadata from path (get step may have used skip_download): %s", err)
 	} else if err := json.Unmarshal(content, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal metadata from file: %s", err)
 	}
@@ -58,16 +58,14 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 
 	// Delete previous comments if specified
 	if request.Params.DeletePreviousComments {
-		err = manager.DeletePreviousComments(version.PR)
-		if err != nil {
+		if err := manager.DeletePreviousComments(version.PR); err != nil {
 			return nil, fmt.Errorf("failed to delete previous comments: %s", err)
 		}
 	}
 
 	// Set comment if specified
 	if p := request.Params; p.Comment != "" {
-		err = manager.PostComment(version.PR, safeExpandEnv(p.Comment))
-		if err != nil {
+		if err := manager.PostComment(version.PR, safeExpandEnv(p.Comment)); err != nil {
 			return nil, fmt.Errorf("failed to post comment: %s", err)
 		}
 	}
@@ -80,8 +78,7 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 		}
 		comment := string(content)
 		if comment != "" {
-			err = manager.PostComment(version.PR, safeExpandEnv(comment))
-			if err != nil {
+			if err := manager.PostComment(version.PR, safeExpandEnv(comment)); err != nil {
 				return nil, fmt.Errorf("failed to post comment: %s", err)
 			}
 		}
