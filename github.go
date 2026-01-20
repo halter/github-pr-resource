@@ -19,7 +19,7 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v81/github"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
 	vault "github.com/hashicorp/vault/api"
@@ -390,7 +390,7 @@ func (m *GithubClient) PostComment(prNumber, comment string) error {
 		m.Repository,
 		pr,
 		&github.IssueComment{
-			Body: github.String(comment),
+			Body: github.Ptr(comment),
 		},
 	)
 	return err
@@ -537,11 +537,11 @@ func (m *GithubClient) UpdateCommitStatus(commitRef, baseContext, statusContext,
 		m.Owner,
 		m.Repository,
 		commitRef,
-		&github.RepoStatus{
-			State:       github.String(strings.ToLower(status)),
-			TargetURL:   github.String(targetURL),
-			Description: github.String(description),
-			Context:     github.String(path.Join(baseContext, statusContext)),
+		github.RepoStatus{
+			State:       github.Ptr(strings.ToLower(status)),
+			TargetURL:   github.Ptr(targetURL),
+			Description: github.Ptr(description),
+			Context:     github.Ptr(path.Join(baseContext, statusContext)),
 		},
 	)
 	return err

@@ -17,7 +17,7 @@ import (
 
 	resource "github.com/telia-oss/github-pr-resource"
 
-	"github.com/google/go-github/v28/github"
+	"github.com/google/go-github/v81/github"
 	"github.com/shurcooL/githubv4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -627,15 +627,15 @@ func TestPutCommentsE2E(t *testing.T) {
 			require.NoError(t, err)
 
 			pullRequest, _, err := githubClient.V3.PullRequests.Create(context.TODO(), owner, repository, &github.NewPullRequest{
-				Title: github.String(tc.description),
-				Base:  github.String("master"),
-				Head:  github.String(fmt.Sprintf("%s:%s", owner, "test-comments")),
+				Title: github.Ptr(tc.description),
+				Base:  github.Ptr("master"),
+				Head:  github.Ptr(fmt.Sprintf("%s:%s", owner, "test-comments")),
 			})
 			require.NoError(t, err)
 
 			for _, comment := range tc.previousComments {
 				_, _, err = githubClient.V3.Issues.CreateComment(context.TODO(), owner, repository, pullRequest.GetNumber(), &github.IssueComment{
-					Body: github.String(comment),
+					Body: github.Ptr(comment),
 				})
 				require.NoError(t, err)
 			}
@@ -664,7 +664,7 @@ func TestPutCommentsE2E(t *testing.T) {
 			}
 
 			_, _, err = githubClient.V3.PullRequests.Edit(context.TODO(), owner, repository, pullRequest.GetNumber(), &github.PullRequest{
-				State: github.String("closed"),
+				State: github.Ptr("closed"),
 			})
 			require.NoError(t, err)
 		})
