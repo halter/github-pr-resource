@@ -22,7 +22,7 @@ func Check(request CheckRequest, manager Github) (CheckResponse, error) {
 
 	pulls, err := manager.ListPullRequests(filterStates)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get last commits: %s", err)
+		return nil, fmt.Errorf("failed to get last commits: %w", err)
 	}
 
 	disableSkipCI := request.Source.DisableCISkip
@@ -40,7 +40,7 @@ Loop:
 		}
 
 		// Filter pull request if the BaseBranch does not match the one specified in source
-		if request.Source.BaseBranch != "" && p.PullRequestObject.BaseRefName != request.Source.BaseBranch {
+		if request.Source.BaseBranch != "" && p.BaseRefName != request.Source.BaseBranch {
 			continue
 		}
 
@@ -57,7 +57,7 @@ Loop:
 						// set the versionTime to the latest time of all
 						// the status checks
 
-						if prStatus.CreatedAt.Time.After(versionTime) {
+						if prStatus.CreatedAt.After(versionTime) {
 							versionTime = prStatus.CreatedAt.Time
 						}
 						break
@@ -114,7 +114,7 @@ Loop:
 		if len(request.Source.Paths) > 0 || len(request.Source.IgnorePaths) > 0 {
 			files, err = manager.ListModifiedFiles(p.Number)
 			if err != nil {
-				return nil, fmt.Errorf("failed to list modified files: %s", err)
+				return nil, fmt.Errorf("failed to list modified files: %w", err)
 			}
 		}
 
@@ -124,7 +124,7 @@ Loop:
 			for _, pattern := range request.Source.Paths {
 				w, err := FilterPath(files, pattern)
 				if err != nil {
-					return nil, fmt.Errorf("path match failed: %s", err)
+					return nil, fmt.Errorf("path match failed: %w", err)
 				}
 				wanted = append(wanted, w...)
 			}
@@ -139,7 +139,7 @@ Loop:
 			for _, pattern := range request.Source.IgnorePaths {
 				wanted, err = FilterIgnorePath(wanted, pattern)
 				if err != nil {
-					return nil, fmt.Errorf("ignore path match failed: %s", err)
+					return nil, fmt.Errorf("ignore path match failed: %w", err)
 				}
 			}
 			if len(wanted) == 0 {

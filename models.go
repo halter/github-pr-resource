@@ -69,7 +69,7 @@ func (s *Source) Validate() error {
 		case githubv4.PullRequestStateClosed:
 		case githubv4.PullRequestStateMerged:
 		default:
-			return errors.New(fmt.Sprintf("states value \"%s\" must be one of: OPEN, MERGED, CLOSED", state))
+			return fmt.Errorf("states value \"%s\" must be one of: OPEN, MERGED, CLOSED", state)
 		}
 	}
 	return nil
@@ -101,11 +101,11 @@ type Version struct {
 // NewVersion constructs a new Version.
 func NewVersion(p *PullRequest, changedDate time.Time) Version {
 	return Version{
-		PR:                  strconv.Itoa(p.Number),
-		Commit:              p.Tip.OID,
-		State:               p.State,
-		CommittedDate:       p.Tip.CommittedDate.Time,
-		ChangedDate:         changedDate,
+		PR:            strconv.Itoa(p.Number),
+		Commit:        p.Tip.OID,
+		State:         p.State,
+		CommittedDate: p.Tip.CommittedDate.Time,
+		ChangedDate:   changedDate,
 	}
 }
 
@@ -127,7 +127,7 @@ func (p *PullRequest) Age() time.Time {
 	// handles the case where you're creating a fresh PR:
 	// there might be a few minutes between the push date and when you open the PR,
 	// so in that case take the CreatedAt date.
-	if age.Time.Before(p.CreatedAt.Time) {
+	if age.Before(p.CreatedAt.Time) {
 		age = &p.CreatedAt
 	}
 	return age.Time

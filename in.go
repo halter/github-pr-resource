@@ -38,14 +38,14 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	// Write version.json early so put step can post status even if get fails
 	path := filepath.Join(outputDir, ".git", "resource")
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %s", err)
+		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 	b, err := json.Marshal(request.Version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal version: %s", err)
+		return nil, fmt.Errorf("failed to marshal version: %w", err)
 	}
 	if err := ioutil.WriteFile(filepath.Join(path, "version.json"), b, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write version: %s", err)
+		return nil, fmt.Errorf("failed to write version: %w", err)
 	}
 
 	// If skip_download is set, return early with just the version info (useful for on_failure handlers)
@@ -56,7 +56,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 
 	pull, err := github.GetPullRequest(request.Version.PR, request.Version.Commit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve pull request: %s", err)
+		return nil, fmt.Errorf("failed to retrieve pull request: %w", err)
 	}
 	log.Printf("Pull request number : %d, commit : %s\n", pull.Number, request.Version.Commit)
 
@@ -96,17 +96,17 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	// Write metadata for reuse in PUT (version.json already written at start)
 	b, err = json.Marshal(metadata)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal metadata: %s", err)
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 	if err := ioutil.WriteFile(filepath.Join(path, "metadata.json"), b, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write metadata: %s", err)
+		return nil, fmt.Errorf("failed to write metadata: %w", err)
 	}
 
 	for _, d := range metadata {
 		filename := d.Name
 		content := []byte(d.Value)
 		if err := ioutil.WriteFile(filepath.Join(path, filename), content, 0644); err != nil {
-			return nil, fmt.Errorf("failed to write metadata file %s: %s", filename, err)
+			return nil, fmt.Errorf("failed to write metadata file %s: %w", filename, err)
 		}
 	}
 
@@ -198,7 +198,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	if request.Params.ListChangedFiles {
 		cfol, err := github.GetChangedFiles(request.Version.PR, request.Version.Commit)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch list of changed files: %s", err)
+			return nil, fmt.Errorf("failed to fetch list of changed files: %w", err)
 		}
 
 		var fl []byte
@@ -209,7 +209,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 
 		// Create List with changed files
 		if err := ioutil.WriteFile(filepath.Join(path, "changed_files"), fl, 0644); err != nil {
-			return nil, fmt.Errorf("failed to write file list: %s", err)
+			return nil, fmt.Errorf("failed to write file list: %w", err)
 		}
 	}
 

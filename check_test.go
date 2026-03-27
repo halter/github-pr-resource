@@ -337,7 +337,7 @@ func TestCheck(t *testing.T) {
 			}
 			for i := range tc.pullRequests {
 				for j := range filterStates {
-					if filterStates[j] == tc.pullRequests[i].PullRequestObject.State {
+					if filterStates[j] == tc.pullRequests[i].State {
 						pullRequests = append(pullRequests, tc.pullRequests[i])
 						break
 					}
