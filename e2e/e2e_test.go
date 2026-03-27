@@ -633,12 +633,24 @@ func TestPutCommentsE2E(t *testing.T) {
 			})
 			require.NoError(t, err)
 
+			// Previous comments include a marker with a different build URL so they are detectable for deletion.
 			for _, comment := range tc.previousComments {
+				body := comment + fmt.Sprintf("\n<!-- %s build:https://ci.example.com/builds/previous -->", resource.CommentMarkerPrefix)
 				_, _, err = githubClient.V3.Issues.CreateComment(context.TODO(), owner, repository, pullRequest.GetNumber(), &github.IssueComment{
-					Body: github.Ptr(comment),
+					Body: github.Ptr(body),
 				})
 				require.NoError(t, err)
 			}
+
+			// Set build env vars so the current put uses a different build URL than previous comments.
+			oldATC := os.Getenv("ATC_EXTERNAL_URL")
+			oldBuildID := os.Getenv("BUILD_ID")
+			os.Setenv("ATC_EXTERNAL_URL", "https://ci.example.com")
+			os.Setenv("BUILD_ID", "current")
+			defer func() {
+				os.Setenv("ATC_EXTERNAL_URL", oldATC)
+				os.Setenv("BUILD_ID", oldBuildID)
+			}()
 
 			getRequest := resource.GetRequest{Source: tc.source, Version: resource.Version{
 				PR:     strconv.Itoa(pullRequest.GetNumber()),
@@ -660,7 +672,7 @@ func TestPutCommentsE2E(t *testing.T) {
 
 			require.Len(t, comments, len(tc.expectedComments))
 			for index, comment := range comments {
-				require.Equal(t, tc.expectedComments[index], comment.GetBody())
+				require.Contains(t, comment.GetBody(), tc.expectedComments[index])
 			}
 
 			_, _, err = githubClient.V3.PullRequests.Edit(context.TODO(), owner, repository, pullRequest.GetNumber(), &github.PullRequest{
