@@ -3,6 +3,7 @@ package resource
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -86,22 +87,22 @@ func (g *GitClient) command(name string, arg ...string) *exec.Cmd {
 // Init ...
 func (g *GitClient) Init(branch string) error {
 	if err := g.command("git", "init").Run(); err != nil {
-		return fmt.Errorf("init failed: %s", err)
+		return fmt.Errorf("init failed: %w", err)
 	}
 	if err := g.command("git", "checkout", "-b", branch).Run(); err != nil {
-		return fmt.Errorf("checkout to '%s' failed: %s", branch, err)
+		return fmt.Errorf("checkout to '%s' failed: %w", branch, err)
 	}
 	if err := g.command("git", "config", "user.name", "concourse-ci").Run(); err != nil {
-		return fmt.Errorf("failed to configure git user: %s", err)
+		return fmt.Errorf("failed to configure git user: %w", err)
 	}
 	if err := g.command("git", "config", "user.email", "concourse@local").Run(); err != nil {
-		return fmt.Errorf("failed to configure git email: %s", err)
+		return fmt.Errorf("failed to configure git email: %w", err)
 	}
 	if err := g.command("git", "config", "url.https://x-oauth-basic@github.com/.insteadOf", "git@github.com:").Run(); err != nil {
-		return fmt.Errorf("failed to configure github url: %s", err)
+		return fmt.Errorf("failed to configure github url: %w", err)
 	}
 	if err := g.command("git", "config", "url.https://.insteadOf", "git://").Run(); err != nil {
-		return fmt.Errorf("failed to configure github url: %s", err)
+		return fmt.Errorf("failed to configure github url: %w", err)
 	}
 	return nil
 }
@@ -114,7 +115,7 @@ func (g *GitClient) Pull(uri, branch string, depth int, submodules bool, fetchTa
 	}
 
 	if err := g.command("git", "remote", "add", "origin", endpoint).Run(); err != nil {
-		return fmt.Errorf("setting 'origin' remote to '%s' failed: %s", endpoint, err)
+		return fmt.Errorf("setting 'origin' remote to '%s' failed: %w", endpoint, err)
 	}
 
 	args := []string{"pull", "origin", branch}
@@ -139,7 +140,7 @@ func (g *GitClient) Pull(uri, branch string, depth int, submodules bool, fetchTa
 	if submodules {
 		submodulesGet := g.command("git", "submodule", "update", "--init", "--recursive")
 		if err := submodulesGet.Run(); err != nil {
-			return fmt.Errorf("submodule update failed: %s", err)
+			return fmt.Errorf("submodule update failed: %w", err)
 		}
 	}
 	return nil
@@ -151,7 +152,7 @@ func (g *GitClient) RevParse(branch string) (string, error) {
 	cmd.Dir = g.Directory
 	sha, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("rev-parse '%s' failed: %s: %s", branch, err, string(sha))
+		return "", fmt.Errorf("rev-parse '%s' failed: %w: %s", branch, err, string(sha))
 	}
 	return strings.TrimSpace(string(sha)), nil
 }
@@ -177,7 +178,7 @@ func (g *GitClient) Fetch(uri string, prNumber int, depth int, submodules bool) 
 	cmd.Stderr = ioutil.Discard
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("fetch failed: %s", err)
+		return fmt.Errorf("fetch failed: %w", err)
 	}
 	return nil
 }
@@ -185,12 +186,12 @@ func (g *GitClient) Fetch(uri string, prNumber int, depth int, submodules bool) 
 // CheckOut
 func (g *GitClient) Checkout(branch, sha string, submodules bool) error {
 	if err := g.command("git", "checkout", "-b", branch, sha).Run(); err != nil {
-		return fmt.Errorf("checkout failed: %s", err)
+		return fmt.Errorf("checkout failed: %w", err)
 	}
 
 	if submodules {
 		if err := g.command("git", "submodule", "update", "--init", "--recursive", "--checkout").Run(); err != nil {
-			return fmt.Errorf("submodule update failed: %s", err)
+			return fmt.Errorf("submodule update failed: %w", err)
 		}
 	}
 
@@ -204,12 +205,12 @@ func (g *GitClient) Merge(sha string, submodules bool) error {
 	if err != nil {
 		var s = fmt.Sprintf("merge failed: %s %s %s", err, &errBuffer, out)
 		errBuffer.Truncate(0)
-		return fmt.Errorf(s)
+		return errors.New(s)
 	}
 
 	if submodules {
 		if err := g.command("git", "submodule", "update", "--init", "--recursive", "--merge").Run(); err != nil {
-			return fmt.Errorf("submodule update failed: %s", err)
+			return fmt.Errorf("submodule update failed: %w", err)
 		}
 	}
 
@@ -219,12 +220,12 @@ func (g *GitClient) Merge(sha string, submodules bool) error {
 // Rebase ...
 func (g *GitClient) Rebase(baseRef string, headSha string, submodules bool) error {
 	if err := g.command("git", "rebase", baseRef, headSha).Run(); err != nil {
-		return fmt.Errorf("rebase failed: %s", err)
+		return fmt.Errorf("rebase failed: %w", err)
 	}
 
 	if submodules {
 		if err := g.command("git", "submodule", "update", "--init", "--recursive", "--rebase").Run(); err != nil {
-			return fmt.Errorf("submodule update failed: %s", err)
+			return fmt.Errorf("submodule update failed: %w", err)
 		}
 	}
 
@@ -244,10 +245,10 @@ func (g *GitClient) GitCryptUnlock(base64key string) error {
 	}
 	keyPath := filepath.Join(keyDir, "git-crypt-key")
 	if err := ioutil.WriteFile(keyPath, decodedKey, os.FileMode(0600)); err != nil {
-		return fmt.Errorf("failed to write git-crypt key to file: %s", err)
+		return fmt.Errorf("failed to write git-crypt key to file: %w", err)
 	}
 	if err := g.command("git-crypt", "unlock", keyPath).Run(); err != nil {
-		return fmt.Errorf("git-crypt unlock failed: %s", err)
+		return fmt.Errorf("git-crypt unlock failed: %w", err)
 	}
 	return nil
 }
@@ -256,7 +257,7 @@ func (g *GitClient) GitCryptUnlock(base64key string) error {
 func (g *GitClient) Endpoint(uri string) (string, error) {
 	endpoint, err := url.Parse(uri)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse commit url: %s", err)
+		return "", fmt.Errorf("failed to parse commit url: %w", err)
 	}
 	// wow, having an username as anythingWorks, works.  I guess this makes sense
 	// as the token is probably a hash to an user or app on the server

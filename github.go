@@ -44,7 +44,7 @@ type Github interface {
 	GetPullRequest(string, string) (*PullRequest, error)
 	GetChangedFiles(string, string) ([]ChangedFileObject, error)
 	UpdateCommitStatus(string, string, string, string, string, string) error
-	DeletePreviousComments(string) error
+	DeletePreviousComments(string, string) error
 }
 
 // GithubClient for handling requests to the Github V3 and V4 APIs.
@@ -134,8 +134,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 		}
 	}
 
-	var ctx context.Context
-	ctx = context.WithValue(context.TODO(), oauth2.HTTPClient, cachingTransport.Client())
+	var ctx context.Context = context.WithValue(context.TODO(), oauth2.HTTPClient, cachingTransport.Client())
 
 	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: s.AccessToken},
@@ -145,7 +144,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	if s.V3Endpoint != "" {
 		endpoint, err := url.Parse(s.V3Endpoint)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse v3 endpoint: %s", err)
+			return nil, fmt.Errorf("failed to parse v3 endpoint: %w", err)
 		}
 		v3, err = github.NewEnterpriseClient(endpoint.String(), endpoint.String(), client)
 		if err != nil {
@@ -159,7 +158,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 	if s.V4Endpoint != "" {
 		endpoint, err := url.Parse(s.V4Endpoint)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse v4 endpoint: %s", err)
+			return nil, fmt.Errorf("failed to parse v4 endpoint: %w", err)
 		}
 		v4 = githubv4.NewEnterpriseClient(endpoint.String(), client)
 		if err != nil {
@@ -181,7 +180,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 func SendToDataDog(request GetRequest, err error) {
 	s := request.Source
 	if (s.OdAdvanced.DataDogApiKey != "") && (s.OdAdvanced.DataDogAppKey != "") {
-		var status string = "success"
+		var status = "success"
 		if err != nil {
 			if strings.Contains(err.Error(), "refusing to merge unrelated histories") {
 				status = "refusingToMergeUnrelatedHistories"
@@ -381,7 +380,7 @@ func (m *GithubClient) ListModifiedFiles(prNumber int) ([]string, error) {
 func (m *GithubClient) PostComment(prNumber, comment string) error {
 	pr, err := strconv.Atoi(prNumber)
 	if err != nil {
-		return fmt.Errorf("failed to convert pull request number to int: %s", err)
+		return fmt.Errorf("failed to convert pull request number to int: %w", err)
 	}
 
 	_, _, err = m.V3.Issues.CreateComment(
@@ -400,7 +399,7 @@ func (m *GithubClient) PostComment(prNumber, comment string) error {
 func (m *GithubClient) GetChangedFiles(prNumber string, commitRef string) ([]ChangedFileObject, error) {
 	pr, err := strconv.Atoi(prNumber)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert pull request number to int: %s", err)
+		return nil, fmt.Errorf("failed to convert pull request number to int: %w", err)
 	}
 
 	var cfo []ChangedFileObject
@@ -459,7 +458,7 @@ func (m *GithubClient) getPullRequestHelper(prNumber, commitRef string, commitsL
 	}
 	pr, err := strconv.Atoi(prNumber)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert pull request number to int: %s", err)
+		return nil, fmt.Errorf("failed to convert pull request number to int: %w", err)
 	}
 
 	var query struct {
@@ -547,16 +546,13 @@ func (m *GithubClient) UpdateCommitStatus(commitRef, baseContext, statusContext,
 	return err
 }
 
-func (m *GithubClient) DeletePreviousComments(prNumber string) error {
+func (m *GithubClient) DeletePreviousComments(prNumber string, currentBuildURL string) error {
 	pr, err := strconv.Atoi(prNumber)
 	if err != nil {
-		return fmt.Errorf("failed to convert pull request number to int: %s", err)
+		return fmt.Errorf("failed to convert pull request number to int: %w", err)
 	}
 
 	var getComments struct {
-		Viewer struct {
-			Login string
-		}
 		Repository struct {
 			PullRequest struct {
 				Id       string
@@ -564,9 +560,7 @@ func (m *GithubClient) DeletePreviousComments(prNumber string) error {
 					Edges []struct {
 						Node struct {
 							DatabaseId int64
-							Author     struct {
-								Login string
-							}
+							Body       string
 						}
 					}
 				} `graphql:"comments(last:$commentsLast)"`
@@ -586,15 +580,35 @@ func (m *GithubClient) DeletePreviousComments(prNumber string) error {
 	}
 
 	for _, e := range getComments.Repository.PullRequest.Comments.Edges {
-		if e.Node.Author.Login == getComments.Viewer.Login {
-			_, err := m.V3.Issues.DeleteComment(context.TODO(), m.Owner, m.Repository, e.Node.DatabaseId)
-			if err != nil {
-				return err
+		if !strings.Contains(e.Node.Body, CommentMarkerPrefix) {
+			continue
+		}
+		if currentBuildURL != "" {
+			if buildURL := extractBuildURLFromMarker(e.Node.Body); buildURL == currentBuildURL {
+				continue
 			}
+		}
+		_, err := m.V3.Issues.DeleteComment(context.TODO(), m.Owner, m.Repository, e.Node.DatabaseId)
+		if err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func extractBuildURLFromMarker(body string) string {
+	marker := "<!-- " + CommentMarkerPrefix + " build:"
+	idx := strings.Index(body, marker)
+	if idx == -1 {
+		return ""
+	}
+	rest := body[idx+len(marker):]
+	end := strings.Index(rest, " -->")
+	if end == -1 {
+		return ""
+	}
+	return rest[:end]
 }
 
 func parseRepository(s string) (string, string, error) {
@@ -613,20 +627,20 @@ func getRateLimit(source Source) (int, int, error) {
 	command := fmt.Sprintf("curl -s https://api.github.com/rate_limit -H \"Authorization: token %s\" > rateLimit.json", source.AccessToken)
 	_, err := exec.Command("sh", "-c", command).Output()
 	if err != nil {
-		return 0, 0, fmt.Errorf("getRateLimit curl error : %s", err)
+		return 0, 0, fmt.Errorf("getRateLimit curl error : %w", err)
 	}
-	command = fmt.Sprintf("cat rateLimit.json | jq -r '.resources.core.remaining'")
+	command = "cat rateLimit.json | jq -r '.resources.core.remaining'"
 	coreRemaining, err := exec.Command("sh", "-c", command).Output()
 	if err != nil {
-		return 0, 0, fmt.Errorf("getRateLimit jq error : %s", err)
+		return 0, 0, fmt.Errorf("getRateLimit jq error : %w", err)
 	}
-	coreRemainingInt, _ := strconv.Atoi(strings.TrimSpace(fmt.Sprintf("%s", coreRemaining)))
-	command = fmt.Sprintf("cat rateLimit.json | jq -r '.resources.graphql.remaining'")
+	coreRemainingInt, _ := strconv.Atoi(strings.TrimSpace(string(coreRemaining)))
+	command = "cat rateLimit.json | jq -r '.resources.graphql.remaining'"
 	graphqlRemaining, err := exec.Command("sh", "-c", command).Output()
 	if err != nil {
-		return 0, 0, fmt.Errorf("getRateLimit jq error : %s", err)
+		return 0, 0, fmt.Errorf("getRateLimit jq error : %w", err)
 	}
-	graphqlRemainingInt, _ := strconv.Atoi(strings.TrimSpace(fmt.Sprintf("%s", graphqlRemaining)))
+	graphqlRemainingInt, _ := strconv.Atoi(strings.TrimSpace(string(graphqlRemaining)))
 	return coreRemainingInt, graphqlRemainingInt, nil
 }
 

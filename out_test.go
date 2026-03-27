@@ -204,14 +204,16 @@ func TestPut(t *testing.T) {
 				if assert.Equal(t, 1, github.PostCommentCallCount()) {
 					pr, comment := github.PostCommentArgsForCall(0)
 					assert.Equal(t, tc.version.PR, pr)
-					assert.Equal(t, tc.parameters.Comment, comment)
+					assert.Contains(t, comment, tc.parameters.Comment)
+					assert.Contains(t, comment, resource.CommentMarkerPrefix)
 				}
 			}
 
 			if tc.parameters.DeletePreviousComments {
 				if assert.Equal(t, 1, github.DeletePreviousCommentsCallCount()) {
-					pr := github.DeletePreviousCommentsArgsForCall(0)
+					pr, buildURL := github.DeletePreviousCommentsArgsForCall(0)
 					assert.Equal(t, tc.version.PR, pr)
+					assert.Empty(t, buildURL)
 				}
 			}
 		})
@@ -326,7 +328,8 @@ func TestVariableSubstitution(t *testing.T) {
 			if tc.parameters.Comment != "" {
 				if assert.Equal(t, 1, github.PostCommentCallCount()) {
 					_, comment := github.PostCommentArgsForCall(0)
-					assert.Equal(t, tc.expectedComment, comment)
+					assert.Contains(t, comment, tc.expectedComment)
+					assert.Contains(t, comment, resource.CommentMarkerPrefix)
 				}
 			}
 
