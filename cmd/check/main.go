@@ -33,15 +33,28 @@ func main() {
 	if err := request.Source.Validate(); err != nil {
 		log.Fatalf("invalid source configuration: %s", err)
 	}
-	github, err := resource.NewGithubClient(&request.Source)
-	if err != nil {
-		log.Fatalf("failed to create github manager: %s", err)
+	var managers []resource.Github
+	if request.Source.HasGitHub() {
+		github, err := resource.NewGithubClient(&request.Source)
+		if err != nil {
+			log.Fatalf("failed to create github manager: %s", err)
+		}
+		managers = append(managers, github)
 	}
-	response, err := resource.Check(request, github)
+	if request.Source.HasGitea() {
+		giteaManager, err := resource.NewGiteaClient(&request.Source)
+		if err != nil {
+			log.Fatalf("failed to create gitea manager: %s", err)
+		}
+		managers = append(managers, giteaManager)
+	}
+	response, err := resource.Check(request, managers...)
 	if err != nil {
 		log.Fatalf("check failed: %s", err)
 	}
-	resource.PrintCurrentRateLimit(request.Source)
+	if request.Source.HasGitHub() {
+		resource.PrintCurrentRateLimit(request.Source)
+	}
 	resource.PrintDebugOutput(request.Source, response)
 	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		log.Fatalf("failed to marshal response: %s", err)

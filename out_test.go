@@ -171,7 +171,7 @@ func TestPut(t *testing.T) {
 			git.RevParseReturns("sha", nil)
 
 			dir := createTestDirectory(t)
-			defer os.RemoveAll(dir)
+			defer func() { _ = os.RemoveAll(dir) }()
 
 			// Run get so we have version and metadata for the put request
 			// (This is tested in in_test.go)
@@ -303,7 +303,7 @@ func TestVariableSubstitution(t *testing.T) {
 			git.RevParseReturns("sha", nil)
 
 			dir := createTestDirectory(t)
-			defer os.RemoveAll(dir)
+			defer func() { _ = os.RemoveAll(dir) }()
 
 			// Run get so we have version and metadata for the put request
 			getInput := resource.GetRequest{Source: tc.source, Version: tc.version, Params: resource.GetParameters{}}
@@ -311,12 +311,13 @@ func TestVariableSubstitution(t *testing.T) {
 			require.NoError(t, err)
 
 			oldValue := os.Getenv(variableName)
-			defer os.Setenv(variableName, oldValue)
+			defer func() { _ = os.Setenv(variableName, oldValue) }()
 
-			os.Setenv(variableName, variableValue)
+			require.NoError(t, os.Setenv(variableName, variableValue))
 
 			putInput := resource.PutRequest{Source: tc.source, Params: tc.parameters}
 			_, err = resource.Put(putInput, github, dir)
+			require.NoError(t, err)
 
 			if tc.parameters.TargetURL != "" {
 				if assert.Equal(t, 1, github.UpdateCommitStatusCallCount()) {

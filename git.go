@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -39,10 +38,14 @@ type Git interface {
 // NewGitClient ...
 func NewGitClient(source *Source, dir string, output io.Writer) (*GitClient, error) {
 	if source.SkipSSLVerification {
-		os.Setenv("GIT_SSL_NO_VERIFY", "true")
+		if err := os.Setenv("GIT_SSL_NO_VERIFY", "true"); err != nil {
+			return nil, fmt.Errorf("failed to set GIT_SSL_NO_VERIFY: %w", err)
+		}
 	}
 	if source.DisableGitLFS {
-		os.Setenv("GIT_LFS_SKIP_SMUDGE", "true")
+		if err := os.Setenv("GIT_LFS_SKIP_SMUDGE", "true"); err != nil {
+			return nil, fmt.Errorf("failed to set GIT_LFS_SKIP_SMUDGE: %w", err)
+		}
 	}
 	return &GitClient{
 		AccessToken: &source.AccessToken,
@@ -131,8 +134,8 @@ func (g *GitClient) Pull(uri, branch string, depth int, submodules bool, fetchTa
 	cmd := g.command("git", args...)
 
 	// Discard output to have zero chance of logging the access token.
-	cmd.Stdout = ioutil.Discard
-	cmd.Stderr = ioutil.Discard
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pull failed: %s", cmd)
@@ -174,8 +177,8 @@ func (g *GitClient) Fetch(uri string, prNumber int, depth int, submodules bool) 
 	cmd := g.command("git", args...)
 
 	// Discard output to have zero chance of logging the access token.
-	cmd.Stdout = ioutil.Discard
-	cmd.Stderr = ioutil.Discard
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fetch failed: %w", err)
@@ -234,17 +237,19 @@ func (g *GitClient) Rebase(baseRef string, headSha string, submodules bool) erro
 
 // GitCryptUnlock unlocks the repository using git-crypt
 func (g *GitClient) GitCryptUnlock(base64key string) error {
-	keyDir, err := ioutil.TempDir("", "")
+	keyDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory")
 	}
-	defer os.RemoveAll(keyDir)
+	defer func() {
+		_ = os.RemoveAll(keyDir)
+	}()
 	decodedKey, err := base64.StdEncoding.DecodeString(base64key)
 	if err != nil {
 		return fmt.Errorf("failed to decode git-crypt key")
 	}
 	keyPath := filepath.Join(keyDir, "git-crypt-key")
-	if err := ioutil.WriteFile(keyPath, decodedKey, os.FileMode(0600)); err != nil {
+	if err := os.WriteFile(keyPath, decodedKey, os.FileMode(0600)); err != nil {
 		return fmt.Errorf("failed to write git-crypt key to file: %w", err)
 	}
 	if err := g.command("git-crypt", "unlock", keyPath).Run(); err != nil {

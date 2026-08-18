@@ -3,7 +3,6 @@ package resource
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -24,6 +23,19 @@ func buildCommentMarker() string {
 	return fmt.Sprintf("\n<!-- %s build:%s -->", CommentMarkerPrefix, currentBuildURL())
 }
 
+// ReadVersion reads the version written to disk by a previous GET step.
+func ReadVersion(inputDir, paramsPath string) (Version, error) {
+	var version Version
+	content, err := os.ReadFile(filepath.Join(inputDir, paramsPath, ".git", "resource", "version.json"))
+	if err != nil {
+		return version, fmt.Errorf("failed to read version from path: %w", err)
+	}
+	if err := json.Unmarshal(content, &version); err != nil {
+		return version, fmt.Errorf("failed to unmarshal version from file: %w", err)
+	}
+	return version, nil
+}
+
 // Put (business logic)
 func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, error) {
 	if err := request.Params.Validate(); err != nil {
@@ -32,18 +44,14 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 	path := filepath.Join(inputDir, request.Params.Path, ".git", "resource")
 
 	// Version available after a GET step.
-	var version Version
-	content, err := ioutil.ReadFile(filepath.Join(path, "version.json"))
+	version, err := ReadVersion(inputDir, request.Params.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read version from path: %w", err)
-	}
-	if err := json.Unmarshal(content, &version); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal version from file: %w", err)
+		return nil, err
 	}
 
 	// Metadata available after a GET step (optional - may not exist if get used skip_download).
 	var metadata Metadata
-	content, err = ioutil.ReadFile(filepath.Join(path, "metadata.json"))
+	content, err := os.ReadFile(filepath.Join(path, "metadata.json"))
 	if err != nil {
 		log.Printf("warning: failed to read metadata from path (get step may have used skip_download): %s", err)
 	} else if err := json.Unmarshal(content, &metadata); err != nil {
@@ -56,7 +64,7 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 
 		// Set description from a file
 		if p.DescriptionFile != "" {
-			content, err := ioutil.ReadFile(filepath.Join(inputDir, p.DescriptionFile))
+			content, err := os.ReadFile(filepath.Join(inputDir, p.DescriptionFile))
 			if err != nil {
 				return nil, fmt.Errorf("failed to read description file: %w", err)
 			}
@@ -86,7 +94,7 @@ func Put(request PutRequest, manager Github, inputDir string) (*PutResponse, err
 
 	// Set comment from a file
 	if p := request.Params; p.CommentFile != "" {
-		content, err := ioutil.ReadFile(filepath.Join(inputDir, p.CommentFile))
+		content, err := os.ReadFile(filepath.Join(inputDir, p.CommentFile))
 		if err != nil {
 			return nil, fmt.Errorf("failed to read comment file: %w", err)
 		}

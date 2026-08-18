@@ -10,8 +10,9 @@ import (
 	"time"
 )
 
-// Check (business logic)
-func Check(request CheckRequest, manager Github) (CheckResponse, error) {
+// Check (business logic). Accepts one manager per configured provider
+// (GitHub, Gitea) and interleaves the pull requests from all of them.
+func Check(request CheckRequest, managers ...Github) (CheckResponse, error) {
 	var response CheckResponse
 
 	// Filter out pull request if it does not have a filtered state
@@ -20,10 +21,19 @@ func Check(request CheckRequest, manager Github) (CheckResponse, error) {
 		filterStates = request.Source.States
 	}
 
-	pulls, err := manager.ListPullRequests(filterStates)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get last commits: %w", err)
+	var pulls []*PullRequest
+	managerFor := make(map[*PullRequest]Github)
+	for _, manager := range managers {
+		p, err := manager.ListPullRequests(filterStates)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get last commits: %w", err)
+		}
+		for _, pull := range p {
+			managerFor[pull] = manager
+			pulls = append(pulls, pull)
+		}
 	}
+	var err error
 
 	disableSkipCI := request.Source.DisableCISkip
 
@@ -112,7 +122,7 @@ Loop:
 		var files []string
 
 		if len(request.Source.Paths) > 0 || len(request.Source.IgnorePaths) > 0 {
-			files, err = manager.ListModifiedFiles(p.Number)
+			files, err = managerFor[p].ListModifiedFiles(p.Number)
 			if err != nil {
 				return nil, fmt.Errorf("failed to list modified files: %w", err)
 			}
@@ -165,7 +175,7 @@ Loop:
 
 // ContainsSkipCI returns true if a string contains [ci skip] or [skip ci].
 func ContainsSkipCI(s string) bool {
-	re := regexp.MustCompile("(?i)\\[(ci skip|skip ci)\\]")
+	re := regexp.MustCompile(`(?i)\[(ci skip|skip ci)\]`)
 	return re.MatchString(s)
 }
 

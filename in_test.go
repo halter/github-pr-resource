@@ -2,7 +2,6 @@ package resource_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,10 +34,10 @@ func TestGet(t *testing.T) {
 				AccessToken: "oauthtoken",
 			},
 			version: resource.Version{
-				PR:                  "pr1",
-				Commit:              "commit1",
-				ChangedDate:         time.Time{},
-								State:               githubv4.PullRequestStateOpen,
+				PR:          "pr1",
+				Commit:      "commit1",
+				ChangedDate: time.Time{},
+				State:       githubv4.PullRequestStateOpen,
 			},
 			parameters:     resource.GetParameters{GitDepth: resource.DefaultGitDepth},
 			pullRequest:    createTestPR(1, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
@@ -53,10 +52,10 @@ func TestGet(t *testing.T) {
 				GitCryptKey: "gitcryptkey",
 			},
 			version: resource.Version{
-				PR:                  "pr1",
-				Commit:              "commit1",
-				ChangedDate:         time.Time{},
-								State:               githubv4.PullRequestStateOpen,
+				PR:          "pr1",
+				Commit:      "commit1",
+				ChangedDate: time.Time{},
+				State:       githubv4.PullRequestStateOpen,
 			},
 			parameters:     resource.GetParameters{GitDepth: resource.DefaultGitDepth},
 			pullRequest:    createTestPR(1, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
@@ -70,10 +69,10 @@ func TestGet(t *testing.T) {
 				AccessToken: "oauthtoken",
 			},
 			version: resource.Version{
-				PR:                  "pr1",
-				Commit:              "commit1",
-				ChangedDate:         time.Time{},
-								State:               githubv4.PullRequestStateOpen,
+				PR:          "pr1",
+				Commit:      "commit1",
+				ChangedDate: time.Time{},
+				State:       githubv4.PullRequestStateOpen,
 			},
 			parameters: resource.GetParameters{
 				IntegrationTool: "rebase",
@@ -90,10 +89,10 @@ func TestGet(t *testing.T) {
 				AccessToken: "oauthtoken",
 			},
 			version: resource.Version{
-				PR:                  "pr1",
-				Commit:              "commit1",
-				ChangedDate:         time.Time{},
-								State:               githubv4.PullRequestStateOpen,
+				PR:          "pr1",
+				Commit:      "commit1",
+				ChangedDate: time.Time{},
+				State:       githubv4.PullRequestStateOpen,
 			},
 			parameters: resource.GetParameters{
 				IntegrationTool: "checkout",
@@ -110,10 +109,10 @@ func TestGet(t *testing.T) {
 				AccessToken: "oauthtoken",
 			},
 			version: resource.Version{
-				PR:                  "pr1",
-				Commit:              "commit1",
-				ChangedDate:         time.Time{},
-								State:               githubv4.PullRequestStateOpen,
+				PR:          "pr1",
+				Commit:      "commit1",
+				ChangedDate: time.Time{},
+				State:       githubv4.PullRequestStateOpen,
 			},
 			parameters: resource.GetParameters{
 				GitDepth: 2,
@@ -129,10 +128,10 @@ func TestGet(t *testing.T) {
 				AccessToken: "oauthtoken",
 			},
 			version: resource.Version{
-				PR:                  "pr1",
-				Commit:              "commit1",
-				ChangedDate:         time.Time{},
-								State:               githubv4.PullRequestStateOpen,
+				PR:          "pr1",
+				Commit:      "commit1",
+				ChangedDate: time.Time{},
+				State:       githubv4.PullRequestStateOpen,
 			},
 			parameters: resource.GetParameters{
 				ListChangedFiles: true,
@@ -166,7 +165,7 @@ func TestGet(t *testing.T) {
 			git.RevParseReturns("sha", nil)
 
 			dir := createTestDirectory(t)
-			defer os.RemoveAll(dir)
+			defer func() { _ = os.RemoveAll(dir) }()
 
 			input := resource.GetRequest{Source: tc.source, Version: tc.version, Params: tc.parameters}
 			output, err := resource.Get(input, github, git, dir)
@@ -305,7 +304,7 @@ func TestGetSkipDownload(t *testing.T) {
 			github := new(fakes.FakeGithub)
 			git := new(fakes.FakeGit)
 			dir := createTestDirectory(t)
-			defer os.RemoveAll(dir)
+			defer func() { _ = os.RemoveAll(dir) }()
 
 			// Run the get and check output
 			input := resource.GetRequest{Source: tc.source, Version: tc.version, Params: tc.parameters}
@@ -399,7 +398,7 @@ func createTestPR(
 }
 
 func createTestDirectory(t *testing.T) string {
-	dir, err := ioutil.TempDir("", "github-pr-resource")
+	dir, err := os.MkdirTemp("", "github-pr-resource")
 	if err != nil {
 		t.Fatalf("failed to create temporary directory")
 	}
@@ -407,7 +406,7 @@ func createTestDirectory(t *testing.T) string {
 }
 
 func readTestFile(t *testing.T, path string) string {
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("failed to read: %s: %s", path, err)
 	}

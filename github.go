@@ -134,7 +134,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 		}
 	}
 
-	var ctx context.Context = context.WithValue(context.TODO(), oauth2.HTTPClient, cachingTransport.Client())
+	var ctx = context.WithValue(context.TODO(), oauth2.HTTPClient, cachingTransport.Client())
 
 	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: s.AccessToken},
@@ -146,7 +146,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse v3 endpoint: %w", err)
 		}
-		v3, err = github.NewEnterpriseClient(endpoint.String(), endpoint.String(), client)
+		v3, err = github.NewClient(client).WithEnterpriseURLs(endpoint.String(), endpoint.String())
 		if err != nil {
 			return nil, err
 		}

@@ -14,10 +14,20 @@ type StatusFilter struct {
 	State   string
 }
 
+// Provider identifies which backend a pull request originates from.
+// An empty provider is treated as GitHub for backwards compatibility.
+const (
+	ProviderGitHub = "github"
+	ProviderGitea  = "gitea"
+)
+
 // Source represents the configuration for the resource.
 type Source struct {
 	Repository              string                      `json:"repository"`
 	AccessToken             string                      `json:"access_token"`
+	GiteaRepository         string                      `json:"gitea_repository"`
+	GiteaAccessToken        string                      `json:"gitea_access_token"`
+	GiteaEndpoint           string                      `json:"gitea_endpoint"`
 	OdAdvanced              OdAdvanced                  `json:"od_advanced"`
 	V3Endpoint              string                      `json:"v3_endpoint"`
 	V4Endpoint              string                      `json:"v4_endpoint"`
@@ -49,13 +59,31 @@ type OdAdvanced struct {
 	Debug                                                 bool   `json:"debug"`
 }
 
+// HasGitHub returns true if the source is configured for GitHub.
+func (s *Source) HasGitHub() bool {
+	return s.Repository != ""
+}
+
+// HasGitea returns true if the source is configured for Gitea.
+func (s *Source) HasGitea() bool {
+	return s.GiteaRepository != ""
+}
+
 // Validate the source configuration.
 func (s *Source) Validate() error {
-	if s.AccessToken == "" {
+	if !s.HasGitHub() && !s.HasGitea() {
+		return errors.New("repository or gitea_repository must be set")
+	}
+	if s.HasGitHub() && s.AccessToken == "" {
 		return errors.New("access_token must be set")
 	}
-	if s.Repository == "" {
-		return errors.New("repository must be set")
+	if s.HasGitea() {
+		if s.GiteaAccessToken == "" {
+			return errors.New("gitea_access_token must be set together with gitea_repository")
+		}
+		if s.GiteaEndpoint == "" {
+			return errors.New("gitea_endpoint must be set together with gitea_repository")
+		}
 	}
 	if s.V3Endpoint != "" && s.V4Endpoint == "" {
 		return errors.New("v4_endpoint must be set together with v3_endpoint")
@@ -96,6 +124,7 @@ type Version struct {
 	CommittedDate time.Time                 `json:"committed,omitempty"`
 	ChangedDate   time.Time                 `json:"changed,omitempty"`
 	State         githubv4.PullRequestState `json:"state"`
+	Provider      string                    `json:"provider,omitempty"`
 }
 
 // NewVersion constructs a new Version.
@@ -106,6 +135,7 @@ func NewVersion(p *PullRequest, changedDate time.Time) Version {
 		State:         p.State,
 		CommittedDate: p.Tip.CommittedDate.Time,
 		ChangedDate:   changedDate,
+		Provider:      p.Provider,
 	}
 }
 
@@ -115,6 +145,7 @@ type PullRequest struct {
 	Tip                 CommitObject
 	ApprovedReviewCount int
 	Labels              []LabelObject
+	Provider            string
 }
 
 // Age: returns a date of the last update to the PR.

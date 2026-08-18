@@ -3,7 +3,6 @@ package resource
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -44,7 +43,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal version: %w", err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(path, "version.json"), b, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(path, "version.json"), b, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write version: %w", err)
 	}
 
@@ -98,14 +97,14 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(path, "metadata.json"), b, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(path, "metadata.json"), b, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write metadata: %w", err)
 	}
 
 	for _, d := range metadata {
 		filename := d.Name
 		content := []byte(d.Value)
-		if err := ioutil.WriteFile(filepath.Join(path, filename), content, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(path, filename), content, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write metadata file %s: %w", filename, err)
 		}
 	}
@@ -208,7 +207,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 		}
 
 		// Create List with changed files
-		if err := ioutil.WriteFile(filepath.Join(path, "changed_files"), fl, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(path, "changed_files"), fl, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write file list: %w", err)
 		}
 	}
