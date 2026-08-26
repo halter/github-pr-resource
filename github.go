@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -78,7 +77,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 			skipAccessToken = true
 		}
 	}
-	log.Printf("current AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+	log.Printf("current AccessToken type : %s\n", tokenTypePrefix(s.AccessToken))
 	log.Printf("If the AccessToken starts with 'ghp_', it is a GitHub Personal token\n")
 	log.Printf("If the AccessToken starts with 'ghs_', it is a GitHub App token - which has a higher rateLimit and is more secure\n")
 	if skipAccessToken {
@@ -87,7 +86,7 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 			log.Printf("There is a problem with vault %s\n", err)
 			return nil, err
 		}
-		log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+		log.Printf("new AccessToken type : %s\n", tokenTypePrefix(s.AccessToken))
 		PrintCurrentRateLimit(*s)
 	} else {
 		coreRemaining, graphqlRemaining, _ := getRateLimit(*s)
@@ -108,13 +107,13 @@ func NewGithubClient(s *Source) (*GithubClient, error) {
 				log.Printf("setting AccessToken to first element in AccessTokenAdditional\n")
 				// TODO altho we are passing a list of AccessTokenAdditional, we will only consider the first element as it is already sorted
 				// by highest remaining ... in the future consider the rest of the list, altho this TODO is a low priority
-				log.Printf("old AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+				log.Printf("old AccessToken type : %s\n", tokenTypePrefix(s.AccessToken))
 				s.AccessToken, err = getAccessTokenFromVault(*s)
 				if err != nil {
 					log.Printf("There is a problem with vault %s\n", err)
 					return nil, err
 				}
-				log.Printf("new AccessToken : %s_REDACTED\n", s.AccessToken[0:10])
+				log.Printf("new AccessToken type : %s\n", tokenTypePrefix(s.AccessToken))
 				PrintCurrentRateLimit(*s)
 			} else {
 				log.Printf("there is sufficient minRemaining : %d rateLimit.  No need to use AccessTokenAdditional\n", minRemaining)
@@ -619,29 +618,45 @@ func parseRepository(s string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
+func tokenTypePrefix(token string) string {
+	if i := strings.Index(token, "_"); i >= 0 {
+		return token[:i+1]
+	}
+	return "unknown"
+}
+
 /*
 returns rateLimit for core and rateLimit for graphql
 i.e. github ratelimit has sections for different resources
 */
 func getRateLimit(source Source) (int, int, error) {
-	command := fmt.Sprintf("curl -s https://api.github.com/rate_limit -H \"Authorization: token %s\" > rateLimit.json", source.AccessToken)
-	_, err := exec.Command("sh", "-c", command).Output()
+	req, err := http.NewRequest("GET", "https://api.github.com/rate_limit", nil)
 	if err != nil {
-		return 0, 0, fmt.Errorf("getRateLimit curl error : %w", err)
+		return 0, 0, fmt.Errorf("getRateLimit request error : %w", err)
 	}
-	command = "cat rateLimit.json | jq -r '.resources.core.remaining'"
-	coreRemaining, err := exec.Command("sh", "-c", command).Output()
+	req.Header.Set("Authorization", "token "+source.AccessToken)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, 0, fmt.Errorf("getRateLimit jq error : %w", err)
+		return 0, 0, fmt.Errorf("getRateLimit http error : %w", err)
 	}
-	coreRemainingInt, _ := strconv.Atoi(strings.TrimSpace(string(coreRemaining)))
-	command = "cat rateLimit.json | jq -r '.resources.graphql.remaining'"
-	graphqlRemaining, err := exec.Command("sh", "-c", command).Output()
-	if err != nil {
-		return 0, 0, fmt.Errorf("getRateLimit jq error : %w", err)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, fmt.Errorf("getRateLimit unexpected status : %s", resp.Status)
 	}
-	graphqlRemainingInt, _ := strconv.Atoi(strings.TrimSpace(string(graphqlRemaining)))
-	return coreRemainingInt, graphqlRemainingInt, nil
+	var rateLimit struct {
+		Resources struct {
+			Core struct {
+				Remaining int `json:"remaining"`
+			} `json:"core"`
+			Graphql struct {
+				Remaining int `json:"remaining"`
+			} `json:"graphql"`
+		} `json:"resources"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rateLimit); err != nil {
+		return 0, 0, fmt.Errorf("getRateLimit decode error : %w", err)
+	}
+	return rateLimit.Resources.Core.Remaining, rateLimit.Resources.Graphql.Remaining, nil
 }
 
 func PrintCurrentRateLimit(source Source) {

@@ -136,7 +136,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				log.Printf("Performing merge abort ...")
 				command = fmt.Sprintf("cd %s && git merge --abort 2>&1", outputDir)
 				out, _ = exec.Command("sh", "-c", command).CombinedOutput()
-				outTrim = strings.TrimSpace(string(out))
+				outTrim = RedactSecrets(request.Source, strings.TrimSpace(string(out)))
 				log.Printf("command : %s returned: %s\n", command, outTrim)
 
 				request.Params.GitDepth *= 2
@@ -157,7 +157,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				// shouldn't this have been written in Bash?
 				command = fmt.Sprintf("cd %s && git pull --depth %d origin %s", outputDir, request.Params.GitDepth, pull.BaseRefName)
 				out, cmdErr = exec.Command("sh", "-c", command).CombinedOutput()
-				outTrim = strings.TrimSpace(string(out))
+				outTrim = RedactSecrets(request.Source, strings.TrimSpace(string(out)))
 				log.Printf("command : %s returned: %s\n", command, outTrim)
 				if cmdErr != nil {
 					log.Printf("commandErr : %s", cmdErr)
@@ -167,7 +167,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 				command = getFetchCommand(git, outputDir, pull.Number, request.Params.GitDepth, false)
 				commandRedacted := getFetchCommand(git, outputDir, pull.Number, request.Params.GitDepth, true)
 				out, cmdErr = exec.Command("sh", "-c", command).CombinedOutput()
-				outTrim = strings.TrimSpace(string(out))
+				outTrim = RedactSecrets(request.Source, strings.TrimSpace(string(out)))
 				if cmdErr != nil {
 					log.Printf("commandErr : %s, command : %s\n", cmdErr, commandRedacted)
 				}
@@ -178,7 +178,7 @@ func Get(request GetRequest, github Github, git Git, outputDir string) (*GetResp
 		log.Printf("END merge")
 		if err != nil {
 			log.Printf("merge failed after depth of %d (maxDepth : %d), returning err %s\n", request.Params.GitDepth, MaxGitDepth, err)
-			err = Wrap(err, outTrim+errBuffer.String())
+			err = Wrap(err, RedactSecrets(request.Source, outTrim+errBuffer.String()))
 			return nil, err
 		}
 	case "checkout":
