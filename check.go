@@ -2,12 +2,15 @@ package resource
 
 import (
 	"fmt"
-	"github.com/shurcooL/githubv4"
+	"log"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shurcooL/githubv4"
 )
 
 // Check (business logic)
@@ -24,6 +27,14 @@ func Check(request CheckRequest, manager Github) (CheckResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commits: %w", err)
 	}
+
+	// A version that only names a pull request (fly check-resource --from pr:N) asks for that
+	// pull request's tip alone; it is not a version to order against or to return.
+	if request.Version.IsPullRequestHint() {
+		pulls = pullRequestNumbered(pulls, request.Version.PR)
+		request.Version = Version{}
+	}
+	previousPR, _ := strconv.Atoi(request.Version.PR)
 
 	disableSkipCI := request.Source.DisableCISkip
 
@@ -44,33 +55,17 @@ Loop:
 			continue
 		}
 
-		versionTime := p.Age()
-		if len(request.Source.StatusFilters) > 0 {
-			for _, statusFilter := range request.Source.StatusFilters {
-				// "zero time - epoch = 0"
-				versionTime = time.Time{}
-				isValid := false
-				for _, prStatus := range p.Tip.Status.Contexts {
-					if prStatus.Context == statusFilter.Context && strings.EqualFold(prStatus.State, statusFilter.State) {
-						// requires the given status exists and that it matches the desired state
-						isValid = true
-						// set the versionTime to the latest time of all
-						// the status checks
-
-						if prStatus.CreatedAt.After(versionTime) {
-							versionTime = prStatus.CreatedAt.Time
-						}
-						break
-					}
-				}
-				if !isValid {
-					continue Loop
-				}
-			}
+		versionTime, statusOK := statusVersionTime(p, request.Source.StatusFilters)
+		if !statusOK {
+			continue
 		}
 
-		// Filter out commits that are too old.
-		if !p.Age().After(request.Version.ChangedDate) {
+		// Skip pull requests with no activity since the last version, and the one that produced
+		// it, before spending an API call on them.
+		if !p.UpdatedAt.After(request.Version.ChangedDate) {
+			continue
+		}
+		if p.Number == previousPR && p.Tip.OID == request.Version.Commit && p.State == request.Version.State && len(request.Source.StatusFilters) == 0 {
 			continue
 		}
 
@@ -106,6 +101,20 @@ Loop:
 		// Filter pull request if it does not have the required number of approved review(s).
 		if p.ApprovedReviewCount < request.Source.RequiredReviewApprovals {
 			continue
+		}
+
+		pushed, err := pushedDate(manager, p)
+		if err != nil {
+			return nil, err
+		}
+		changed := p.ChangedDate(pushed)
+
+		// Filter out commits that are too old.
+		if !changed.After(request.Version.ChangedDate) {
+			continue
+		}
+		if len(request.Source.StatusFilters) == 0 {
+			versionTime = changed
 		}
 
 		// Fetch files once if paths/ignore_paths are specified.
@@ -161,6 +170,60 @@ Loop:
 		response = CheckResponse{response[len(response)-1]}
 	}
 	return response, nil
+}
+
+func pullRequestNumbered(pulls []*PullRequest, number string) []*PullRequest {
+	for _, p := range pulls {
+		if strconv.Itoa(p.Number) == number {
+			return []*PullRequest{p}
+		}
+	}
+	return nil
+}
+
+// statusVersionTime is the time of the newest status check the filters require, and whether the
+// pull request's tip has every one of them.
+func statusVersionTime(p *PullRequest, filters []StatusFilter) (time.Time, bool) {
+	var versionTime time.Time
+	for _, statusFilter := range filters {
+		// "zero time - epoch = 0"
+		versionTime = time.Time{}
+		isValid := false
+		for _, prStatus := range p.Tip.Status.Contexts {
+			if prStatus.Context == statusFilter.Context && strings.EqualFold(prStatus.State, statusFilter.State) {
+				// requires the given status exists and that it matches the desired state
+				isValid = true
+				// set the versionTime to the latest time of all
+				// the status checks
+
+				if prStatus.CreatedAt.After(versionTime) {
+					versionTime = prStatus.CreatedAt.Time
+				}
+				break
+			}
+		}
+		if !isValid {
+			return time.Time{}, false
+		}
+	}
+	return versionTime, true
+}
+
+// pushedDate is when the pull request's tip was pushed, or zero when the order does not depend on
+// it: a fork's branch has no activity in this repository, a merged pull request is ordered by its
+// merge, and a push GitHub has not recorded is ordered by its committer date.
+func pushedDate(manager Github, p *PullRequest) (time.Time, error) {
+	if p.IsCrossRepository || p.State == githubv4.PullRequestStateMerged {
+		return time.Time{}, nil
+	}
+	pushed, found, err := manager.PushedDate(p.HeadRefName, p.Tip.OID)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("pr %d: failed to look up when %s was pushed: %w", p.Number, p.Tip.OID, err)
+	}
+	if !found {
+		log.Printf("pr %d: no push of %s recorded on %s, ordering it by its committer date", p.Number, p.Tip.OID, p.HeadRefName)
+	}
+	return pushed, nil
 }
 
 // ContainsSkipCI returns true if a string contains [ci skip] or [skip ci].

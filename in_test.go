@@ -372,14 +372,15 @@ func createTestPR(
 			IsCrossRepository: isCrossRepo,
 			IsDraft:           isDraft,
 			State:             state,
-			ClosedAt:          githubv4.DateTime{Time: time.Now()},
-			MergedAt:          githubv4.DateTime{Time: time.Now()},
+			UpdatedAt:         githubv4.DateTime{Time: d},
+			ClosedAt:          githubv4.DateTime{Time: d},
+			MergedAt:          githubv4.DateTime{Time: d},
 		},
 		Tip: resource.CommitObject{
-			ID:         fmt.Sprintf("commit%s", n),
-			OID:        fmt.Sprintf("oid%s", n),
-			PushedDate: &githubv4.DateTime{Time: d},
-			Message:    m,
+			ID:            fmt.Sprintf("commit%s", n),
+			OID:           fmt.Sprintf("oid%s", n),
+			CommittedDate: githubv4.DateTime{Time: d},
+			Message:       m,
 			Author: struct {
 				User  struct{ Login string }
 				Email string

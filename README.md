@@ -39,30 +39,46 @@ Make sure to check out [#migrating](#migrating) to learn more.
 | `disable_forks`             | No       | `true`                           | Disable triggering of the resource if the pull request's fork repository is different to the configured repository.                                                                                                                                                                        |
 | `ignore_drafts`             | No       | `false`                          | Disable triggering of the resource if the pull request is in Draft status.                                                                                                                                                                                                                 |
 | `required_review_approvals` | No       | `2`                              | Disable triggering of the resource if the pull request does not have at least `X` approved review(s).                                                                                                                                                                                      |
-| `git_crypt_key`             | No       | `AEdJVENSWVBUS0VZAAAAA...`       | Base64 encoded git-crypt key. Setting this will unlock / decrypt the repository with git-crypt. To get the key simply execute `git-crypt export-key -- - | base64` in an encrypted repository.                                                                                             |
+| `git_crypt_key`             | No       | `AEdJVENSWVBUS0VZAAAAA...`       | Base64 encoded git-crypt key. Setting this will unlock / decrypt the repository with git-crypt. To get the key simply execute `git-crypt export-key -- - \| base64` in an encrypted repository.                                                                                             |
 | `base_branch`               | No       | `master`                         | Name of a branch. The pipeline will only trigger on pull requests against the specified branch.                                                                                                                                                                                            |
 | `labels`                    | No       | `["bug", "enhancement"]`         | The labels on the PR. The pipeline will only trigger on pull requests having at least one of the specified labels.                                                                                                                                                                         |
 | `disable_git_lfs`           | No       | `true`                           | Disable Git LFS, skipping an attempt to convert pointers of files tracked into their corresponding objects when checked out into a working copy.                                                                                                                                           |
 | `states`                    | No       | `["OPEN", "MERGED"]`             | The PR states to select (`OPEN`, `MERGED` or `CLOSED`). The pipeline will only trigger on pull requests matching one of the specified states. Default is ["OPEN"].                                                                                                                         |
 
 Notes:
- - If `v3_endpoint` is set, `v4_endpoint` must also be set (and the other way around).
- - Look at the [Concourse Resources documentation](https://concourse-ci.org/resources.html#resource-webhook-token)
+
+- If `v3_endpoint` is set, `v4_endpoint` must also be set (and the other way around).
+- Look at the [Concourse Resources documentation](https://concourse-ci.org/resources.html#resource-webhook-token)
  for webhook token configuration.
- - When using `required_review_approvals`, you may also want to enable GitHub's branch protection rules to [dismiss stale pull request approvals when new commits are pushed](https://help.github.com/en/articles/enabling-required-reviews-for-pull-requests).
+- When using `required_review_approvals`, you may also want to enable GitHub's branch protection rules to [dismiss stale pull request approvals when new commits are pushed](https://help.github.com/en/articles/enabling-required-reviews-for-pull-requests).
 
 ## Behaviour
 
-#### `check`
+### `check`
 
-Produces new versions for all commits (after the last version) ordered by the committed date.
+Produces a new version for the tip of every pull request pushed since the last version, ordered by when it was pushed.
 A version is represented as follows:
 
 - `pr`: The pull request number.
 - `commit`: The commit SHA.
-- `committed`: Timestamp of when the commit was committed. Used to filter subsequent checks.
+- `committed`: Timestamp of when the commit was committed.
+- `changed`: Timestamp the version is ordered by, and used to filter subsequent checks: when the commit was pushed to
+  the pull request's branch, taken from the [repository activity API](https://docs.github.com/en/rest/repos/repos#list-repository-activities),
+  but never earlier than the pull request was opened, closed or merged.
+- `state`: The pull request state.
+
+Ordering by the push rather than the committed date matters because Concourse only schedules `version: every` inputs
+ranked above the newest version a job has already built: a rebased commit keeps an old committer date, so ordering by
+it would rank the commit below versions that were already built and the push would never be scheduled. GitHub's
+GraphQL API no longer populates `Commit.pushedDate`, hence the activity API.
 
 If several commits are pushed to a given PR at the same time, the last commit will be the new version.
+Only open pull requests updated since the last version are looked up (one REST call each); a failed lookup fails the
+check so that no push is skipped past. Pull requests from forks have no activity in the base repository, and a push
+GitHub has not recorded cannot be found, so those are ordered by their committed date instead.
+
+A version that only names a pull request, as in `fly check-resource --from pr:123`, produces just that pull request's
+current tip, ordered as the newest version regardless of its dates.
 
 **Note on webhooks:**
 This resource does not implement any caching, so it should work well with webhooks (should be subscribed to `push` and `pull_request` events).
@@ -71,7 +87,7 @@ generate notifications over the webhook. So if you have a repository with little
  you'll need to discover those versions with `check_every: 1m` for instance. `check` in this resource is not a costly operation,
  so normally you should not have to worry about the rate limit.
 
-#### `get`
+### `get`
 
 | Parameter            | Required | Example  | Description                                                                        |
 |----------------------|----------|----------|------------------------------------------------------------------------------------|
@@ -87,13 +103,14 @@ into master. This ensures that we are both testing and setting status on the exa
 input. Because the base of the PR is not locked to a specific commit in versions emitted from `check`, a fresh
 `get` will always use the latest commit in master and *report the SHA of said commit in the metadata*. Both the
 requested version and the metadata emitted by `get` are available to your tasks as JSON:
+
 - `.git/resource/version.json`
 - `.git/resource/metadata.json`
 - `.git/resource/changed_files` (if enabled by `list_changed_files`)
 
 The information in `metadata.json` is also available as individual files in the `.git/resource` directory, e.g. the `base_sha`
-is available as `.git/resource/base_sha`. For a complete list of available (individual) metadata files, please check the code
-[here](https://github.com/telia-oss/github-pr-resource/blob/master/in.go#L66).
+is available as `.git/resource/base_sha`. For a complete list of available (individual) metadata files, please check
+[the metadata written by `in.go`](https://github.com/telia-oss/github-pr-resource/blob/master/in.go#L66).
 
 When specifying `skip_download` the pull request volume mounted to subsequent tasks will be empty, which is a problem
 when you set e.g. the pending status before running the actual tests. The workaround for this is to use an alias for
@@ -116,8 +133,7 @@ the base, Concourse will reuse the volume (i.e. not trigger a new `get`) if it s
 unexpected results (#5). As such, re-testing a PR against a newer version of the base is best done by *pushing an
 empty commit to the PR*.
 
-
-#### `put`
+### `put`
 
 | Parameter                  | Required | Example                              | Description                                                                                                                                                   |
 |----------------------------|----------|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -197,11 +213,15 @@ translates to 5000 requests, whereas for the V4 API (GraphQL)  the calculation i
 https://developer.github.com/v4/guides/resource-limitations/#calculating-a-rate-limit-score-before-running-the-call
 
 Ref the above, here are some examples of running `check` against large repositories and the cost of doing so:
+
 - [concourse/concourse](https://github.com/concourse/concourse): 51 open pull requests at the time of testing. Cost 2.
 - [torvalds/linux](https://github.com/torvalds/linux): 305 open pull requests. Cost 8.
 - [kubernetes/kubernetes](https://github.com/kubernetes/kubernetes): 1072 open pull requests. Cost: 22.
 
+`check` additionally spends one V3 API call per pull request updated since the last version, to find when its tip was pushed.
+
 For the other two operations the costing is a bit easier:
+
 - `get`: Fixed cost of 1. Fetches the pull request at the given commit.
 - `put`: Uses the V3 API and has a min cost of 1, +1 for each of `status`, `comment` and `comment_file` etc.
 
@@ -209,13 +229,15 @@ For the other two operations the costing is a bit easier:
 
 If you are coming from [jtarchie/github-pullrequest-resource][original-resource], its important to know that this resource is inspired by *but not a drop-in replacement for* the original. Here are some important differences:
 
-#### New parameters:
+### New parameters
+
 - `source`:
   - `v4_endpoint` (see description above)
 - `put`:
   - `comment` (see description above)
 
-#### Parameters that have been renamed:
+### Parameters that have been renamed
+
 - `source`:
   - `repo` -> `repository`
   - `ci_skip` -> `disable_ci_skip` (the logic has been inverted and its `true` by default)
@@ -228,7 +250,8 @@ If you are coming from [jtarchie/github-pullrequest-resource][original-resource]
 - `put`:
   - `comment` -> `comment_file` (because we added `comment`)
 
-#### Parameters that are no longer needed:
+### Parameters that are no longer needed
+
 - `src`:
   - `uri`: We fetch the URI directly from the Github API instead.
   - `private_key`: We clone over HTTPS using the access token for authentication.
@@ -238,7 +261,8 @@ If you are coming from [jtarchie/github-pullrequest-resource][original-resource]
 - `get`:
   - `fetch_merge`: We are opinionated and always do a fetch_merge.
 
-#### Parameters that did not make it:
+### Parameters that did not make it
+
 - `src`:
   - `authorship_restriction`
   - `label`
@@ -291,7 +315,7 @@ query {
 }
 ```
 
+### Clone/Fetch
 
-#### Clone/Fetch
 Clone/fetch is defaulted to a `git_depth` : `1`
 This will double up to a `MaxDepth` if we can't find a common ancestor

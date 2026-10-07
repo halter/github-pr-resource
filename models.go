@@ -109,6 +109,12 @@ func NewVersion(p *PullRequest, changedDate time.Time) Version {
 	}
 }
 
+// IsPullRequestHint reports whether the version only names a pull request to re-check,
+// as passed by `fly check-resource --from pr:N`, rather than a version check has produced.
+func (v Version) IsPullRequestHint() bool {
+	return v.PR != "" && v.ChangedDate.IsZero()
+}
+
 // PullRequest represents a pull request and includes the tip (commit).
 type PullRequest struct {
 	PullRequestObject
@@ -117,20 +123,27 @@ type PullRequest struct {
 	Labels              []LabelObject
 }
 
-// Age: returns a date of the last update to the PR.
-// If the job runs every minute, only PRs with an Age() in the last minute will run.
-func (p *PullRequest) Age() time.Time {
-	age := p.Tip.PushedDate
-	if age == nil {
-		age = &p.Tip.CommittedDate
+// ChangedDate orders the version: when the tip was pushed to the pull request, or committed when
+// the push is unknown, never earlier than the pull request was opened, closed or merged.
+func (p *PullRequest) ChangedDate(pushed time.Time) time.Time {
+	changed := p.Tip.CommittedDate.Time
+	if !pushed.IsZero() {
+		changed = pushed
 	}
-	// handles the case where you're creating a fresh PR:
-	// there might be a few minutes between the push date and when you open the PR,
-	// so in that case take the CreatedAt date.
-	if age.Before(p.CreatedAt.Time) {
-		age = &p.CreatedAt
+	if p.CreatedAt.After(changed) {
+		changed = p.CreatedAt.Time
 	}
-	return age.Time
+	switch p.State {
+	case githubv4.PullRequestStateClosed:
+		if p.ClosedAt.After(changed) {
+			changed = p.ClosedAt.Time
+		}
+	case githubv4.PullRequestStateMerged:
+		if p.MergedAt.After(changed) {
+			changed = p.MergedAt.Time
+		}
+	}
+	return changed
 }
 
 // PullRequestObject represents the GraphQL commit node.
@@ -149,21 +162,9 @@ type PullRequestObject struct {
 	IsDraft           bool
 	State             githubv4.PullRequestState
 	CreatedAt         githubv4.DateTime
+	UpdatedAt         githubv4.DateTime
 	ClosedAt          githubv4.DateTime
 	MergedAt          githubv4.DateTime
-}
-
-// UpdatedDate returns the last time a PR was updated, either by commit
-// or being closed/merged.
-func (p *PullRequest) UpdatedDate() githubv4.DateTime {
-	date := p.Tip.CommittedDate
-	switch p.State {
-	case githubv4.PullRequestStateClosed:
-		date = p.ClosedAt
-	case githubv4.PullRequestStateMerged:
-		date = p.MergedAt
-	}
-	return date
 }
 
 // CommitObject represents the GraphQL commit node.
@@ -172,7 +173,6 @@ type CommitObject struct {
 	ID            string
 	OID           string
 	CommittedDate githubv4.DateTime
-	PushedDate    *githubv4.DateTime
 	Message       string
 	Author        struct {
 		User struct {

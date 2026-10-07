@@ -1,9 +1,11 @@
 package resource_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/google/go-github/v81/github"
 	"github.com/shurcooL/githubv4"
 	"github.com/stretchr/testify/assert"
 	resource "github.com/telia-oss/github-pr-resource"
@@ -11,6 +13,8 @@ import (
 )
 
 var (
+	checkBase = time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+
 	testPullRequests = []*resource.PullRequest{
 		createTestPR(1, "master", true, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
 		createTestPR(2, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, []resource.StatusContext{}),
@@ -39,15 +43,153 @@ var (
 	}
 )
 
+// testVersion is the version check produces for a test pull request pushed when it was committed.
+func testVersion(p *resource.PullRequest) resource.Version {
+	return resource.NewVersion(p, p.Tip.CommittedDate.Time)
+}
+
+func datedPR(number int, committed, updated time.Time) *resource.PullRequest {
+	p := createTestPR(number, "master", false, false, 0, nil, false, githubv4.PullRequestStateOpen, nil)
+	p.Tip.CommittedDate = githubv4.DateTime{Time: committed}
+	p.UpdatedAt = githubv4.DateTime{Time: updated}
+	p.ClosedAt = githubv4.DateTime{Time: updated}
+	p.MergedAt = githubv4.DateTime{Time: updated}
+	return p
+}
+
+type pushLookup struct {
+	at      time.Time
+	missing bool
+	err     error
+}
+
 func TestCheck(t *testing.T) {
+	rebased := datedPR(21, checkBase.Add(-5*24*time.Hour), checkBase.Add(-time.Hour))
+	previous := datedPR(22, checkBase.Add(-2*24*time.Hour), checkBase.Add(-2*24*time.Hour))
+	previousVersion := testVersion(previous)
+
+	forked := datedPR(23, checkBase.Add(-time.Hour), checkBase.Add(-time.Hour))
+	forked.IsCrossRepository = true
+
+	reopened := datedPR(24, checkBase.Add(-5*24*time.Hour), checkBase.Add(-time.Hour))
+	reopened.CreatedAt = githubv4.DateTime{Time: checkBase.Add(-time.Hour)}
+
+	merged := datedPR(25, checkBase.Add(-5*24*time.Hour), checkBase.Add(-time.Hour))
+	merged.State = githubv4.PullRequestStateMerged
+
+	draft := datedPR(26, checkBase.Add(-time.Hour), checkBase.Add(-time.Hour))
+	draft.IsDraft = true
+
+	unrecorded := datedPR(27, checkBase.Add(-time.Hour), checkBase.Add(-time.Hour))
+	commented := datedPR(previous.Number, previous.Tip.CommittedDate.Time, checkBase.Add(-time.Hour))
+
 	tests := []struct {
 		description  string
 		source       resource.Source
 		version      resource.Version
 		files        [][]string
 		pullRequests []*resource.PullRequest
+		pushed       map[string]pushLookup
+		pushLookups  *int
 		expected     resource.CheckResponse
+		wantErr      bool
 	}{
+		{
+			description:  "check orders a rebased commit by when it was pushed rather than committed",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{rebased, previous},
+			pushed:       map[string]pushLookup{rebased.Tip.OID: {at: checkBase.Add(-time.Hour)}},
+			expected:     resource.CheckResponse{resource.NewVersion(rebased, checkBase.Add(-time.Hour))},
+		},
+		{
+			description:  "check skips pull requests with no activity since the last version without looking up pushes",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{datedPR(21, checkBase.Add(-5*24*time.Hour), checkBase.Add(-3*24*time.Hour)), previous},
+			pushLookups:  github.Ptr(0),
+			expected:     resource.CheckResponse{previousVersion},
+		},
+		{
+			description:  "check does not produce a version for a pull request that was only commented on",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{rebased, previous},
+			pushed:       map[string]pushLookup{rebased.Tip.OID: {at: checkBase.Add(-5 * 24 * time.Hour)}},
+			expected:     resource.CheckResponse{previousVersion},
+		},
+		{
+			description:  "check does not look up the pull request that produced the previous version",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{commented},
+			pushLookups:  github.Ptr(0),
+			expected:     resource.CheckResponse{previousVersion},
+		},
+		{
+			description:  "check orders a pull request whose push is not recorded by its committer date",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{unrecorded, previous},
+			pushed:       map[string]pushLookup{unrecorded.Tip.OID: {missing: true}},
+			expected:     resource.CheckResponse{testVersion(unrecorded)},
+		},
+		{
+			description:  "check fails rather than skipping a pull request when the push lookup fails",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{rebased, previous},
+			pushed:       map[string]pushLookup{rebased.Tip.OID: {err: errors.New("rate limited")}},
+			wantErr:      true,
+		},
+		{
+			description:  "check orders a fork's pull request by committer date without looking up pushes",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{forked, previous},
+			pushLookups:  github.Ptr(0),
+			expected:     resource.CheckResponse{resource.NewVersion(forked, checkBase.Add(-time.Hour))},
+		},
+		{
+			description:  "check orders a pull request opened after its branch was pushed by its creation date",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{reopened, previous},
+			pushed:       map[string]pushLookup{reopened.Tip.OID: {at: checkBase.Add(-5 * 24 * time.Hour)}},
+			expected:     resource.CheckResponse{resource.NewVersion(reopened, checkBase.Add(-time.Hour))},
+		},
+		{
+			description:  "check orders a merged pull request by when it was merged",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken", States: []githubv4.PullRequestState{githubv4.PullRequestStateMerged}},
+			version:      previousVersion,
+			pullRequests: []*resource.PullRequest{merged},
+			pushLookups:  github.Ptr(0),
+			expected:     resource.CheckResponse{resource.NewVersion(merged, checkBase.Add(-time.Hour))},
+		},
+		{
+			description:  "check with a pull request hint produces only that pull request's tip whatever its dates",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      resource.Version{PR: "21"},
+			pullRequests: []*resource.PullRequest{rebased, previous, forked},
+			pushed:       map[string]pushLookup{rebased.Tip.OID: {at: checkBase.Add(-5 * 24 * time.Hour)}},
+			pushLookups:  github.Ptr(1),
+			expected:     resource.CheckResponse{resource.NewVersion(rebased, checkBase.Add(-5*24*time.Hour))},
+		},
+		{
+			description:  "check with a pull request hint falls back to the committer date when the push is unknown",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken"},
+			version:      resource.Version{PR: "21"},
+			pullRequests: []*resource.PullRequest{rebased, previous},
+			pushed:       map[string]pushLookup{rebased.Tip.OID: {missing: true}},
+			expected:     resource.CheckResponse{testVersion(rebased)},
+		},
+		{
+			description:  "check with a pull request hint for a filtered pull request produces nothing",
+			source:       resource.Source{Repository: "itsdalmo/test-repository", AccessToken: "oauthtoken", IgnoreDrafts: true},
+			version:      resource.Version{PR: "26"},
+			pullRequests: []*resource.PullRequest{draft, previous},
+			expected:     resource.CheckResponse(nil),
+		},
 		{
 			description: "check returns the latest version if there is no previous",
 			source: resource.Source{
@@ -59,7 +201,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+				testVersion(testPullRequests[1]),
 			},
 		},
 
@@ -69,11 +211,11 @@ func TestCheck(t *testing.T) {
 				Repository:  "itsdalmo/test-repository",
 				AccessToken: "oauthtoken",
 			},
-			version:      resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[1]),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+				testVersion(testPullRequests[1]),
 			},
 		},
 
@@ -83,12 +225,12 @@ func TestCheck(t *testing.T) {
 				Repository:  "itsdalmo/test-repository",
 				AccessToken: "oauthtoken",
 			},
-			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[3]),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.PushedDate.Time),
-				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+				testVersion(testPullRequests[2]),
+				testVersion(testPullRequests[1]),
 			},
 		},
 
@@ -99,7 +241,7 @@ func TestCheck(t *testing.T) {
 				AccessToken: "oauthtoken",
 				Paths:       []string{"terraform/*/*.tf", "terraform/*/*/*.tf"},
 			},
-			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[3]),
 			pullRequests: testPullRequests,
 			files: [][]string{
 				{"README.md", "travis.yml"},
@@ -107,7 +249,7 @@ func TestCheck(t *testing.T) {
 				{"terraform/modules/variables.tf", "travis.yml"},
 			},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.PushedDate.Time),
+				testVersion(testPullRequests[2]),
 			},
 		},
 
@@ -118,7 +260,7 @@ func TestCheck(t *testing.T) {
 				AccessToken: "oauthtoken",
 				IgnorePaths: []string{"*.md", "*.yml"},
 			},
-			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[3]),
 			pullRequests: testPullRequests,
 			files: [][]string{
 				{"README.md", "travis.yml"},
@@ -126,7 +268,7 @@ func TestCheck(t *testing.T) {
 				{"terraform/modules/variables.tf", "travis.yml"},
 			},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.PushedDate.Time),
+				testVersion(testPullRequests[2]),
 			},
 		},
 
@@ -137,10 +279,10 @@ func TestCheck(t *testing.T) {
 				AccessToken:   "oauthtoken",
 				DisableCISkip: true,
 			},
-			version:      resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[1]),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[0], testPullRequests[0].Tip.PushedDate.Time),
+				testVersion(testPullRequests[0]),
 			},
 		},
 
@@ -151,10 +293,10 @@ func TestCheck(t *testing.T) {
 				AccessToken:  "oauthtoken",
 				IgnoreDrafts: true,
 			},
-			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[3]),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+				testVersion(testPullRequests[1]),
 			},
 		},
 
@@ -165,11 +307,11 @@ func TestCheck(t *testing.T) {
 				AccessToken:  "oauthtoken",
 				IgnoreDrafts: false,
 			},
-			version:      resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[3]),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.PushedDate.Time),
-				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+				testVersion(testPullRequests[2]),
+				testVersion(testPullRequests[1]),
 			},
 		},
 
@@ -180,12 +322,12 @@ func TestCheck(t *testing.T) {
 				AccessToken:  "oauthtoken",
 				DisableForks: true,
 			},
-			version:      resource.NewVersion(testPullRequests[5], testPullRequests[5].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[5]),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[3], testPullRequests[3].Tip.PushedDate.Time),
-				resource.NewVersion(testPullRequests[2], testPullRequests[2].Tip.PushedDate.Time),
-				resource.NewVersion(testPullRequests[1], testPullRequests[1].Tip.PushedDate.Time),
+				testVersion(testPullRequests[3]),
+				testVersion(testPullRequests[2]),
+				testVersion(testPullRequests[1]),
 			},
 		},
 
@@ -200,7 +342,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.PushedDate.Time),
+				testVersion(testPullRequests[6]),
 			},
 		},
 
@@ -211,10 +353,10 @@ func TestCheck(t *testing.T) {
 				AccessToken:             "oauthtoken",
 				RequiredReviewApprovals: 1,
 			},
-			version:      resource.NewVersion(testPullRequests[8], testPullRequests[8].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[8]),
 			pullRequests: testPullRequests,
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[7], testPullRequests[7].Tip.PushedDate.Time),
+				testVersion(testPullRequests[7]),
 			},
 		},
 
@@ -229,7 +371,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[6], testPullRequests[6].Tip.PushedDate.Time),
+				testVersion(testPullRequests[6]),
 			},
 		},
 
@@ -244,7 +386,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.PushedDate.Time),
+				testVersion(testPullRequests[9]),
 			},
 		},
 
@@ -267,12 +409,12 @@ func TestCheck(t *testing.T) {
 				AccessToken: "oauthtoken",
 				States:      []githubv4.PullRequestState{githubv4.PullRequestStateClosed, githubv4.PullRequestStateMerged},
 			},
-			version:      resource.NewVersion(testPullRequests[11], testPullRequests[11].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[11]),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[10], testPullRequests[10].Tip.PushedDate.Time),
-				resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.PushedDate.Time),
+				testVersion(testPullRequests[10]),
+				testVersion(testPullRequests[9]),
 			},
 		},
 		{
@@ -288,7 +430,7 @@ func TestCheck(t *testing.T) {
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[12], testPullRequests[12].Tip.PushedDate.Time),
+				testVersion(testPullRequests[12]),
 			},
 		},
 		{
@@ -300,11 +442,11 @@ func TestCheck(t *testing.T) {
 					{Context: "my-status-check-2", State: "success"},
 				},
 			},
-			version:      resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.PushedDate.Time),
+			version:      testVersion(testPullRequests[9]),
 			pullRequests: testPullRequests,
 			files:        [][]string{},
 			expected: resource.CheckResponse{
-				resource.NewVersion(testPullRequests[9], testPullRequests[9].Tip.PushedDate.Time),
+				testVersion(testPullRequests[9]),
 			},
 		},
 		{
@@ -322,14 +464,14 @@ func TestCheck(t *testing.T) {
 			files:        [][]string{},
 			expected: resource.CheckResponse{
 				// todo: pull request index
-				resource.NewVersion(testPullRequests[13], testPullRequests[13].Tip.PushedDate.Time),
+				testVersion(testPullRequests[13]),
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-			github := new(fakes.FakeGithub)
+			fake := new(fakes.FakeGithub)
 			pullRequests := []*resource.PullRequest{}
 			filterStates := []githubv4.PullRequestState{githubv4.PullRequestStateOpen}
 			if len(tc.source.States) > 0 {
@@ -343,19 +485,37 @@ func TestCheck(t *testing.T) {
 					}
 				}
 			}
-			github.ListPullRequestsReturns(pullRequests, nil)
+			fake.ListPullRequestsReturns(pullRequests, nil)
+			fake.PushedDateStub = func(branch, commit string) (time.Time, bool, error) {
+				if lookup, ok := tc.pushed[commit]; ok {
+					return lookup.at, !lookup.missing, lookup.err
+				}
+				for _, p := range tc.pullRequests {
+					if p.Tip.OID == commit {
+						assert.Equal(t, p.HeadRefName, branch)
+						return p.Tip.CommittedDate.Time, true, nil
+					}
+				}
+				return time.Time{}, false, nil
+			}
 
 			for i, file := range tc.files {
-				github.ListModifiedFilesReturnsOnCall(i, file, nil)
+				fake.ListModifiedFilesReturnsOnCall(i, file, nil)
 			}
 
 			input := resource.CheckRequest{Source: tc.source, Version: tc.version}
-			output, err := resource.Check(input, github)
+			output, err := resource.Check(input, fake)
 
-			if assert.NoError(t, err) {
+			if tc.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, output)
+			} else if assert.NoError(t, err) {
 				assert.Equal(t, tc.expected, output)
 			}
-			assert.Equal(t, 1, github.ListPullRequestsCallCount())
+			assert.Equal(t, 1, fake.ListPullRequestsCallCount())
+			if tc.pushLookups != nil {
+				assert.Equal(t, *tc.pushLookups, fake.PushedDateCallCount())
+			}
 		})
 	}
 }
