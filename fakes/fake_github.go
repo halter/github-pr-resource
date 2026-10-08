@@ -3,6 +3,7 @@ package fakes
 
 import (
 	"sync"
+	"time"
 
 	"github.com/shurcooL/githubv4"
 	resource "github.com/telia-oss/github-pr-resource"
@@ -86,6 +87,22 @@ type FakeGithub struct {
 	}
 	postCommentReturnsOnCall map[int]struct {
 		result1 error
+	}
+	PushedDateStub        func(string, string) (time.Time, bool, error)
+	pushedDateMutex       sync.RWMutex
+	pushedDateArgsForCall []struct {
+		arg1 string
+		arg2 string
+	}
+	pushedDateReturns struct {
+		result1 time.Time
+		result2 bool
+		result3 error
+	}
+	pushedDateReturnsOnCall map[int]struct {
+		result1 time.Time
+		result2 bool
+		result3 error
 	}
 	UpdateCommitStatusStub        func(string, string, string, string, string, string) error
 	updateCommitStatusMutex       sync.RWMutex
@@ -492,6 +509,74 @@ func (fake *FakeGithub) PostCommentReturnsOnCall(i int, result1 error) {
 	fake.postCommentReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
+}
+
+func (fake *FakeGithub) PushedDate(arg1 string, arg2 string) (time.Time, bool, error) {
+	fake.pushedDateMutex.Lock()
+	ret, specificReturn := fake.pushedDateReturnsOnCall[len(fake.pushedDateArgsForCall)]
+	fake.pushedDateArgsForCall = append(fake.pushedDateArgsForCall, struct {
+		arg1 string
+		arg2 string
+	}{arg1, arg2})
+	stub := fake.PushedDateStub
+	fakeReturns := fake.pushedDateReturns
+	fake.recordInvocation("PushedDate", []interface{}{arg1, arg2})
+	fake.pushedDateMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2, ret.result3
+	}
+	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
+}
+
+func (fake *FakeGithub) PushedDateCallCount() int {
+	fake.pushedDateMutex.RLock()
+	defer fake.pushedDateMutex.RUnlock()
+	return len(fake.pushedDateArgsForCall)
+}
+
+func (fake *FakeGithub) PushedDateCalls(stub func(string, string) (time.Time, bool, error)) {
+	fake.pushedDateMutex.Lock()
+	defer fake.pushedDateMutex.Unlock()
+	fake.PushedDateStub = stub
+}
+
+func (fake *FakeGithub) PushedDateArgsForCall(i int) (string, string) {
+	fake.pushedDateMutex.RLock()
+	defer fake.pushedDateMutex.RUnlock()
+	argsForCall := fake.pushedDateArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *FakeGithub) PushedDateReturns(result1 time.Time, result2 bool, result3 error) {
+	fake.pushedDateMutex.Lock()
+	defer fake.pushedDateMutex.Unlock()
+	fake.PushedDateStub = nil
+	fake.pushedDateReturns = struct {
+		result1 time.Time
+		result2 bool
+		result3 error
+	}{result1, result2, result3}
+}
+
+func (fake *FakeGithub) PushedDateReturnsOnCall(i int, result1 time.Time, result2 bool, result3 error) {
+	fake.pushedDateMutex.Lock()
+	defer fake.pushedDateMutex.Unlock()
+	fake.PushedDateStub = nil
+	if fake.pushedDateReturnsOnCall == nil {
+		fake.pushedDateReturnsOnCall = make(map[int]struct {
+			result1 time.Time
+			result2 bool
+			result3 error
+		})
+	}
+	fake.pushedDateReturnsOnCall[i] = struct {
+		result1 time.Time
+		result2 bool
+		result3 error
+	}{result1, result2, result3}
 }
 
 func (fake *FakeGithub) UpdateCommitStatus(arg1 string, arg2 string, arg3 string, arg4 string, arg5 string, arg6 string) error {

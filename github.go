@@ -33,6 +33,9 @@ import (
 // failures to write cache are silently ignored.
 const diskCacheFolder = "github-api-cache"
 
+// pushes to look through on a branch for the one that produced the pull request's tip
+const pushActivityPageSize = 10
+
 // Github for testing purposes.
 //
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o fakes/fake_github.go . Github
@@ -44,6 +47,7 @@ type Github interface {
 	GetChangedFiles(string, string) ([]ChangedFileObject, error)
 	UpdateCommitStatus(string, string, string, string, string, string) error
 	DeletePreviousComments(string, string) error
+	PushedDate(string, string) (time.Time, bool, error)
 }
 
 // GithubClient for handling requests to the Github V3 and V4 APIs.
@@ -344,6 +348,29 @@ func (m *GithubClient) ListPullRequests(prStates []githubv4.PullRequestState) ([
 		vars["prCursor"] = query.Repository.PullRequests.PageInfo.EndCursor
 	}
 	return response, nil
+}
+
+// PushedDate returns when the commit was pushed to the branch, from the repository activity
+// (not supported by V4 API, which no longer populates Commit.pushedDate).
+func (m *GithubClient) PushedDate(branch, commit string) (time.Time, bool, error) {
+	activities, _, err := m.V3.Repositories.ListRepositoryActivities(
+		context.TODO(),
+		m.Owner,
+		m.Repository,
+		&github.ListRepositoryActivityOptions{
+			Ref:     "refs/heads/" + branch,
+			PerPage: pushActivityPageSize,
+		},
+	)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	for _, activity := range activities {
+		if activity.After == commit && activity.Timestamp != nil {
+			return activity.Timestamp.Time, true, nil
+		}
+	}
+	return time.Time{}, false, nil
 }
 
 // ListModifiedFiles in a pull request (not supported by V4 API).
