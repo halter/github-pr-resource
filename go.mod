@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.54.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-github/v81 v81.0.0
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/vault/api v1.22.0

@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -18,6 +19,9 @@ type StatusFilter struct {
 type Source struct {
 	Repository              string                      `json:"repository"`
 	AccessToken             string                      `json:"access_token"`
+	AppID                   json.Number                 `json:"app_id"`
+	PrivateKey              string                      `json:"private_key"`
+	InstallationID          json.Number                 `json:"installation_id"`
 	OdAdvanced              OdAdvanced                  `json:"od_advanced"`
 	V3Endpoint              string                      `json:"v3_endpoint"`
 	V4Endpoint              string                      `json:"v4_endpoint"`
@@ -51,8 +55,20 @@ type OdAdvanced struct {
 
 // Validate the source configuration.
 func (s *Source) Validate() error {
-	if s.AccessToken == "" {
-		return errors.New("access_token must be set")
+	if s.UsesGitHubApp() {
+		if s.AppID == "" || s.PrivateKey == "" {
+			return errors.New("app_id and private_key must be set together")
+		}
+		if s.AccessToken != "" {
+			return errors.New("access_token cannot be set together with app_id and private_key")
+		}
+	} else {
+		if s.AccessToken == "" {
+			return errors.New("access_token, or app_id and private_key, must be set")
+		}
+		if s.InstallationID != "" {
+			return errors.New("installation_id requires app_id and private_key")
+		}
 	}
 	if s.Repository == "" {
 		return errors.New("repository must be set")

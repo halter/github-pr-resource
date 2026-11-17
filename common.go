@@ -16,9 +16,15 @@ func RedactSecrets(s Source, str string) string {
 		s.OdAdvanced.VaultApproleSecretId,
 		s.OdAdvanced.DataDogApiKey,
 		s.OdAdvanced.DataDogAppKey,
+		s.PrivateKey,
 	} {
-		if secret != "" {
-			str = strings.ReplaceAll(str, secret, "REDACTED")
+		if secret == "" {
+			continue
+		}
+		str = strings.ReplaceAll(str, secret, "REDACTED")
+		// A multi-line secret appears with its newlines escaped once the request is printed as JSON.
+		if escaped, err := json.Marshal(secret); err == nil {
+			str = strings.ReplaceAll(str, string(escaped[1:len(escaped)-1]), "REDACTED")
 		}
 	}
 	return str

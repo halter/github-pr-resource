@@ -53,6 +53,9 @@ func main() {
 	if err := request.Source.Validate(); err != nil {
 		log.Fatalf("invalid source configuration: %s", err)
 	}
+	if err := request.Source.ResolveAccessToken(); err != nil {
+		log.Fatalf("failed to authenticate as a GitHub App: %s", err)
+	}
 	git, err := resource.NewGitClient(&request.Source, outputDir, os.Stderr)
 	if err != nil {
 		log.Fatalf("failed to create git client: %s", err)
