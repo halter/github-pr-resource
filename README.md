@@ -29,7 +29,10 @@ Make sure to check out [#migrating](#migrating) to learn more.
 | Parameter                   | Required | Example                          | Description                                                                                                                                                                                                                                                                                |
 |-----------------------------|----------|----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `repository`                | Yes      | `itsdalmo/test-repository`       | The repository to target.                                                                                                                                                                                                                                                                  |
-| `access_token`              | Yes      |                                  | A Github Access Token with repository access (required for setting status on commits). N.B. If you want github-pr-resource to work with a private repository. Set `repo:full` permissions on the access token you create on GitHub. If it is a public repository, `repo:status` is enough. |
+| `access_token`              | Yes*     |                                  | A Github Access Token with repository access (required for setting status on commits). N.B. If you want github-pr-resource to work with a private repository. Set `repo:full` permissions on the access token you create on GitHub. If it is a public repository, `repo:status` is enough. *Not required when `app_id` and `private_key` are set. |
+| `app_id`                    | No       | `123456`                         | ID of a GitHub App to authenticate as instead of `access_token`. Requires `private_key`. See [GitHub App authentication](#github-app-authentication).                                                                                                                                      |
+| `private_key`               | No       |                                  | PEM-encoded private key of the GitHub App. Requires `app_id`.                                                                                                                                                                                                                              |
+| `installation_id`           | No       | `7654321`                        | ID of the App's installation to mint tokens for. Defaults to the installation that covers `repository`, which costs one extra API call per run.                                                                                                                                            |
 | `v3_endpoint`               | No       | `https://api.github.com`         | Endpoint to use for the V3 Github API (Restful).                                                                                                                                                                                                                                           |
 | `v4_endpoint`               | No       | `https://api.github.com/graphql` | Endpoint to use for the V4 Github API (Graphql).                                                                                                                                                                                                                                           |
 | `paths`                     | No       | `["terraform/*/*.tf"]`           | Only produce new versions if the PR includes changes to files that match one or more glob patterns or prefixes.                                                                                                                                                                            |
@@ -51,6 +54,28 @@ Notes:
 - Look at the [Concourse Resources documentation](https://concourse-ci.org/resources.html#resource-webhook-token)
  for webhook token configuration.
 - When using `required_review_approvals`, you may also want to enable GitHub's branch protection rules to [dismiss stale pull request approvals when new commits are pushed](https://help.github.com/en/articles/enabling-required-reviews-for-pull-requests).
+
+### GitHub App authentication
+
+With `app_id` and `private_key` set, every `check`, `get` and `put` signs a JWT with the key and exchanges it for an
+[installation access token](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation),
+which it then uses exactly as it would an `access_token`.
+
+Prefer this to passing an installation access token as `access_token`. Concourse keys a resource's version history on
+its `source` with `((vars))` resolved ([concourse/concourse#9124](https://github.com/concourse/concourse/issues/9124)),
+and an installation access token expires after an hour, so each refreshed token gives the resource a new, empty
+history: `check` starts again from the newest pull request and a `version: every` job skips whatever it had not built
+yet. The App's ID and private key do not change between runs, so the history is kept.
+
+```yaml
+resources:
+- name: pull-request
+  type: pull-request
+  source:
+    repository: itsdalmo/test-repository
+    app_id: ((github-app.app_id))
+    private_key: ((github-app.private_key))
+```
 
 ## Behaviour
 
